@@ -67,14 +67,14 @@ export async function POST(req: Request) {
   if (data.receiptImageDataUrl) {
     const decoded = decodeDataUrl(data.receiptImageDataUrl);
     if ("error" in decoded) return Response.json({ error: decoded.error }, { status: 400 });
-    imagePath = saveUpload(decoded.buffer, decoded.mime);
+    imagePath = await saveUpload(decoded.buffer, decoded.mime);
   }
 
   let venmoQrPath: string | null = null;
   if (data.venmoQrDataUrl) {
     const decoded = decodeDataUrl(data.venmoQrDataUrl);
     if ("error" in decoded) return Response.json({ error: decoded.error }, { status: 400 });
-    venmoQrPath = saveUpload(decoded.buffer, decoded.mime);
+    venmoQrPath = await saveUpload(decoded.buffer, decoded.mime);
   }
 
   const items: NewItemInput[] = data.items.map((it) => ({
@@ -85,7 +85,7 @@ export async function POST(req: Request) {
     sharedByAll: it.sharedByAll ?? false,
   }));
 
-  const result = createSplit({
+  const result = await createSplit({
     restaurantName: data.restaurantName ?? null,
     date: data.date ?? null,
     hostName: data.hostName,

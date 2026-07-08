@@ -86,7 +86,7 @@ async function handleReceiptMms(input: InboundSms): Promise<string> {
     ? (await parseReceiptImage(media.buffer, media.mime)).receipt
     : demoReceipt();
 
-  const { splitId, hostKey, hostParticipantId } = createSplit({
+  const { splitId, hostKey, hostParticipantId } = await createSplit({
     hostName: "Host",
     restaurantName: receipt.restaurantName,
     date: new Date().toISOString().slice(0, 10), // display-only
@@ -104,10 +104,10 @@ async function handleReceiptMms(input: InboundSms): Promise<string> {
 
   // Bind this phone to the new split as the host participant, so the host can
   // immediately text their own claims ("I had the tacos") with no join step.
-  setPhoneSession(input.from, splitId, hostParticipantId);
+  await setPhoneSession(input.from, splitId, hostParticipantId);
 
   // Authoritative grand total (includes the 20% tip we just applied).
-  const room = getRoomState(splitId);
+  const room = await getRoomState(splitId);
   const total = room ? room.settlement.grandTotalCents : receipt.totalCents;
   const restaurant = receipt.restaurantName ?? "Your receipt";
   const base = baseUrl();
@@ -120,13 +120,13 @@ async function handleReceiptMms(input: InboundSms): Promise<string> {
 }
 
 /** "join <code> <name>" — join (or rejoin) a split and bind this phone to it. */
-function handleJoin(input: InboundSms, code: string, name: string): string {
+async function handleJoin(input: InboundSms, code: string, name: string): Promise<string> {
   const base = baseUrl();
-  if (!splitExists(code)) {
+  if (!(await splitExists(code))) {
     return `I couldn't find a split with the code "${code}". Double-check it with your host, or text a photo of a receipt to start your own.`;
   }
-  const participant = joinParticipant(code, name);
-  setPhoneSession(input.from, code, participant.id);
+  const participant = await joinParticipant(code, name);
+  await setPhoneSession(input.from, code, participant.id);
   return (
     `You're in, ${participant.name}! 🎉 Follow along at ${base}/split/${code}. ` +
     `Text me what you ordered (e.g. "I had the tacos") and I'll add it to your tab.`
@@ -134,8 +134,8 @@ function handleJoin(input: InboundSms, code: string, name: string): string {
 }
 
 /** "status" — per-person running totals + the unclaimed remainder. */
-function handleStatus(splitId: string): string {
-  const room = getRoomState(splitId);
+async function handleStatus(splitId: string): Promise<string> {
+  const room = await getRoomState(splitId);
   if (!room) return noSessionHelp();
   const nameById = new Map(room.participants.map((p) => [p.id, p.name]));
   const lines = room.settlement.people.map(
@@ -154,8 +154,8 @@ function handleStatus(splitId: string): string {
  * as `self`, persist the resulting actions, log the exchange, and reply with a
  * confirmation + the sender's running total and pay link.
  */
-function handleClaim(input: InboundSms, splitId: string, self: Participant): string {
-  const room = getRoomState(splitId);
+async function handleClaim(input: InboundSms, splitId: string, self: Participant): Promise<string> {
+  const room = await getRoomState(splitId);
   if (!room) return noSessionHelp();
   const base = baseUrl();
 
@@ -173,9 +173,9 @@ function handleClaim(input: InboundSms, splitId: string, self: Participant): str
   };
 
   const parse = parseClaimMessage(input.body, ctx);
-  const applied = applyActions(splitId, parse.actions);
+  const applied = await applyActions(splitId, parse.actions);
 
-  logMessage({
+  await logMessage({
     splitId,
     participantId: self.id,
     channel: "sms",
@@ -184,7 +184,7 @@ function handleClaim(input: InboundSms, splitId: string, self: Participant): str
   });
 
   // Fresh settlement after applying, so the running total reflects this message.
-  const after = getRoomState(splitId);
+  const after = await getRoomState(splitId);
   const person = after ? settlementFor(after.settlement, self.id) : null;
   const total = person?.totalCents ?? 0;
 
@@ -235,9 +235,9 @@ export async function handleInboundSms(input: InboundSms): Promise<string> {
   }
 
   // 3 & 4 require an active phone session.
-  const session = getPhoneSession(input.from);
+  const session = await getPhoneSession(input.from);
   if (session) {
-    const room = getRoomState(session.splitId);
+    const room = await getRoomState(session.splitId);
     if (!room) return noSessionHelp(); // session points at a deleted split
 
     if (/^status$/i.test(trimmed)) {

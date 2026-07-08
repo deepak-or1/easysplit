@@ -17,6 +17,13 @@ import type {
   TipType,
 } from "./types";
 
+/**
+ * The only module that touches the database. SQL is written ONCE here in the
+ * SQLite-compatible dialect with `?` placeholders; src/lib/db.ts picks the
+ * driver (SQLite or Postgres) and rewrites placeholders for Postgres. Every
+ * exported function is async and awaits the adapter.
+ */
+
 /* ------------------------------------------------------------------ */
 /* Row types & mappers                                                 */
 /* ------------------------------------------------------------------ */
@@ -141,56 +148,58 @@ export interface CreateSplitResult {
   hostParticipantId: string;
 }
 
-export function createSplit(input: CreateSplitInput): CreateSplitResult {
+export async function createSplit(input: CreateSplitInput): Promise<CreateSplitResult> {
   const db = getDb();
   const splitId = newRoomId();
   const hostKey = newHostKey();
   const receiptId = newId();
   const hostParticipantId = newId();
 
-  const tx = db.transaction(() => {
-    db.prepare(
+  await db.tx(async (q) => {
+    await q.run(
       `INSERT INTO splits (id, host_key, restaurant_name, date, host_name, venmo_username, venmo_qr_path, tip_type, tip_value, tax_cents)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      splitId,
-      hostKey,
-      input.restaurantName ?? null,
-      input.date ?? null,
-      input.hostName,
-      input.venmoUsername ?? null,
-      input.venmoQrPath ?? null,
-      input.tipType,
-      input.tipValue,
-      input.taxCents,
+      [
+        splitId,
+        hostKey,
+        input.restaurantName ?? null,
+        input.date ?? null,
+        input.hostName,
+        input.venmoUsername ?? null,
+        input.venmoQrPath ?? null,
+        input.tipType,
+        input.tipValue,
+        input.taxCents,
+      ],
     );
-    db.prepare(`INSERT INTO receipts (id, split_id, image_path, ocr_json) VALUES (?, ?, ?, ?)`).run(
+    await q.run(`INSERT INTO receipts (id, split_id, image_path, ocr_json) VALUES (?, ?, ?, ?)`, [
       receiptId,
       splitId,
       input.imagePath ?? null,
       input.ocrJson ?? null,
-    );
-    const insertItem = db.prepare(
-      `INSERT INTO receipt_items (id, receipt_id, name, quantity, unit_price_cents, total_cents, shared_by_all, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    );
-    input.items.forEach((it, i) => {
-      insertItem.run(
-        newId(),
-        receiptId,
-        it.name,
-        Math.max(1, Math.round(it.quantity)),
-        it.unitPriceCents,
-        it.totalCents,
-        it.sharedByAll ? 1 : 0,
-        i,
+    ]);
+    for (const [i, it] of input.items.entries()) {
+      await q.run(
+        `INSERT INTO receipt_items (id, receipt_id, name, quantity, unit_price_cents, total_cents, shared_by_all, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          newId(),
+          receiptId,
+          it.name,
+          Math.max(1, Math.round(it.quantity)),
+          it.unitPriceCents,
+          it.totalCents,
+          it.sharedByAll ? 1 : 0,
+          i,
+        ],
       );
-    });
-    db.prepare(
-      `INSERT INTO participants (id, split_id, name, is_host) VALUES (?, ?, ?, 1)`,
-    ).run(hostParticipantId, splitId, input.hostName);
+    }
+    await q.run(`INSERT INTO participants (id, split_id, name, is_host) VALUES (?, ?, ?, 1)`, [
+      hostParticipantId,
+      splitId,
+      input.hostName,
+    ]);
   });
-  tx();
 
   return { splitId, hostKey, hostParticipantId };
 }
@@ -199,50 +208,47 @@ export function createSplit(input: CreateSplitInput): CreateSplitResult {
 /* Read                                                                */
 /* ------------------------------------------------------------------ */
 
-export function getHostKey(splitId: string): string | null {
-  const row = getDb().prepare(`SELECT host_key FROM splits WHERE id = ?`).get(splitId) as
-    | { host_key: string }
-    | undefined;
+export async function getHostKey(splitId: string): Promise<string | null> {
+  const row = await getDb().get<{ host_key: string }>(
+    `SELECT host_key FROM splits WHERE id = ?`,
+    [splitId],
+  );
   return row?.host_key ?? null;
 }
 
-export function splitExists(splitId: string): boolean {
-  return !!getDb().prepare(`SELECT 1 FROM splits WHERE id = ?`).get(splitId);
+export async function splitExists(splitId: string): Promise<boolean> {
+  const row = await getDb().get<{ one: number }>(`SELECT 1 AS one FROM splits WHERE id = ?`, [
+    splitId,
+  ]);
+  return !!row;
 }
 
-export function getRoomState(splitId: string): RoomState | null {
+export async function getRoomState(splitId: string): Promise<RoomState | null> {
   const db = getDb();
-  const splitRow = db.prepare(`SELECT * FROM splits WHERE id = ?`).get(splitId) as
-    | SplitRow
-    | undefined;
+  const splitRow = await db.get<SplitRow>(`SELECT * FROM splits WHERE id = ?`, [splitId]);
   if (!splitRow) return null;
 
-  const receiptRow = db
-    .prepare(`SELECT * FROM receipts WHERE split_id = ? ORDER BY created_at LIMIT 1`)
-    .get(splitId) as { id: string; image_path: string | null } | undefined;
+  const receiptRow = await db.get<{ id: string; image_path: string | null }>(
+    `SELECT * FROM receipts WHERE split_id = ? ORDER BY created_at LIMIT 1`,
+    [splitId],
+  );
   if (!receiptRow) return null;
 
-  const itemRows = db
-    .prepare(`SELECT * FROM receipt_items WHERE receipt_id = ? ORDER BY sort_order`)
-    .all(receiptRow.id) as ItemRow[];
-  const participantRows = db
-    .prepare(`SELECT * FROM participants WHERE split_id = ? ORDER BY joined_at`)
-    .all(splitId) as ParticipantRow[];
-  const claimRows = db
-    .prepare(
-      `SELECT c.item_id, c.participant_id, c.share_n, c.share_d
+  const itemRows = await db.all<ItemRow>(
+    `SELECT * FROM receipt_items WHERE receipt_id = ? ORDER BY sort_order`,
+    [receiptRow.id],
+  );
+  const participantRows = await db.all<ParticipantRow>(
+    `SELECT * FROM participants WHERE split_id = ? ORDER BY joined_at`,
+    [splitId],
+  );
+  const claimRows = await db.all<ClaimRow>(
+    `SELECT c.item_id, c.participant_id, c.share_n, c.share_d
        FROM claims c JOIN receipt_items i ON i.id = c.item_id
        WHERE i.receipt_id = ?`,
-    )
-    .all(receiptRow.id) as ClaimRow[];
-  const messageRows = db
-    .prepare(
-      `SELECT m.id, m.participant_id, m.channel, m.body, m.reply, m.created_at, p.name AS participant_name
-       FROM messages m LEFT JOIN participants p ON p.id = m.participant_id
-       WHERE m.split_id = ? AND m.direction = 'in'
-       ORDER BY m.created_at DESC, m.id DESC LIMIT 30`,
-    )
-    .all(splitId) as {
+    [receiptRow.id],
+  );
+  const messageRows = await db.all<{
     id: string;
     participant_id: string | null;
     channel: MessageChannel;
@@ -250,7 +256,13 @@ export function getRoomState(splitId: string): RoomState | null {
     reply: string | null;
     created_at: string;
     participant_name: string | null;
-  }[];
+  }>(
+    `SELECT m.id, m.participant_id, m.channel, m.body, m.reply, m.created_at, p.name AS participant_name
+       FROM messages m LEFT JOIN participants p ON p.id = m.participant_id
+       WHERE m.split_id = ? AND m.direction = 'in'
+       ORDER BY m.created_at DESC, m.id DESC LIMIT 30`,
+    [splitId],
+  );
 
   const split = toSplit(splitRow);
   const items = itemRows.map(toItem);
@@ -324,8 +336,7 @@ export interface SplitMetaPatch {
   status?: "open" | "settled";
 }
 
-export function updateSplitMeta(splitId: string, patch: SplitMetaPatch): void {
-  const db = getDb();
+export async function updateSplitMeta(splitId: string, patch: SplitMetaPatch): Promise<void> {
   const sets: string[] = [];
   const vals: unknown[] = [];
   const map: [keyof SplitMetaPatch, string][] = [
@@ -344,7 +355,7 @@ export function updateSplitMeta(splitId: string, patch: SplitMetaPatch): void {
     }
   }
   if (!sets.length) return;
-  db.prepare(`UPDATE splits SET ${sets.join(", ")} WHERE id = ?`).run(...vals, splitId);
+  await getDb().run(`UPDATE splits SET ${sets.join(", ")} WHERE id = ?`, [...vals, splitId]);
 }
 
 export interface EditableItem {
@@ -357,44 +368,46 @@ export interface EditableItem {
 }
 
 /** Full item-list replace. Items omitted from `items` are deleted (their claims cascade). */
-export function replaceItems(splitId: string, items: EditableItem[]): void {
+export async function replaceItems(splitId: string, items: EditableItem[]): Promise<void> {
   const db = getDb();
-  const receipt = db
-    .prepare(`SELECT id FROM receipts WHERE split_id = ? ORDER BY created_at LIMIT 1`)
-    .get(splitId) as { id: string } | undefined;
+  const receipt = await db.get<{ id: string }>(
+    `SELECT id FROM receipts WHERE split_id = ? ORDER BY created_at LIMIT 1`,
+    [splitId],
+  );
   if (!receipt) throw new Error("split has no receipt");
 
-  const tx = db.transaction(() => {
+  await db.tx(async (q) => {
     const keepIds = items.filter((i) => i.id).map((i) => i.id as string);
     if (keepIds.length) {
-      db.prepare(
+      await q.run(
         `DELETE FROM receipt_items WHERE receipt_id = ? AND id NOT IN (${keepIds.map(() => "?").join(",")})`,
-      ).run(receipt.id, ...keepIds);
+        [receipt.id, ...keepIds],
+      );
     } else {
-      db.prepare(`DELETE FROM receipt_items WHERE receipt_id = ?`).run(receipt.id);
+      await q.run(`DELETE FROM receipt_items WHERE receipt_id = ?`, [receipt.id]);
     }
-    const update = db.prepare(
-      `UPDATE receipt_items SET name = ?, quantity = ?, unit_price_cents = ?, total_cents = ?, shared_by_all = ?, sort_order = ? WHERE id = ? AND receipt_id = ?`,
-    );
-    const insert = db.prepare(
-      `INSERT INTO receipt_items (id, receipt_id, name, quantity, unit_price_cents, total_cents, shared_by_all, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    );
-    items.forEach((it, i) => {
+    for (const [i, it] of items.entries()) {
       const qty = Math.max(1, Math.round(it.quantity));
       const shared = it.sharedByAll ? 1 : 0;
       if (it.id) {
-        update.run(it.name, qty, it.unitPriceCents, it.totalCents, shared, i, it.id, receipt.id);
+        await q.run(
+          `UPDATE receipt_items SET name = ?, quantity = ?, unit_price_cents = ?, total_cents = ?, shared_by_all = ?, sort_order = ? WHERE id = ? AND receipt_id = ?`,
+          [it.name, qty, it.unitPriceCents, it.totalCents, shared, i, it.id, receipt.id],
+        );
         // Shrinking quantity can strand over-claims; drop claims that no longer fit.
-        db.prepare(
-          `DELETE FROM claims WHERE item_id = ? AND CAST(share_n AS REAL) / share_d > ?`,
-        ).run(it.id, qty);
+        await q.run(`DELETE FROM claims WHERE item_id = ? AND CAST(share_n AS REAL) / share_d > ?`, [
+          it.id,
+          qty,
+        ]);
       } else {
-        insert.run(newId(), receipt.id, it.name, qty, it.unitPriceCents, it.totalCents, shared, i);
+        await q.run(
+          `INSERT INTO receipt_items (id, receipt_id, name, quantity, unit_price_cents, total_cents, shared_by_all, sort_order)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [newId(), receipt.id, it.name, qty, it.unitPriceCents, it.totalCents, shared, i],
+        );
       }
-    });
+    }
   });
-  tx();
 }
 
 /* ------------------------------------------------------------------ */
@@ -402,36 +415,41 @@ export function replaceItems(splitId: string, items: EditableItem[]): void {
 /* ------------------------------------------------------------------ */
 
 /** Join (or rejoin by name, case-insensitive — keeps refreshes and SMS idempotent). */
-export function joinParticipant(splitId: string, name: string): Participant {
+export async function joinParticipant(splitId: string, name: string): Promise<Participant> {
   const db = getDb();
   const trimmed = name.trim().slice(0, 40);
   if (!trimmed) throw new Error("name required");
-  const existing = db
-    .prepare(`SELECT * FROM participants WHERE split_id = ? AND lower(name) = lower(?)`)
-    .get(splitId, trimmed) as ParticipantRow | undefined;
+  const existing = await db.get<ParticipantRow>(
+    `SELECT * FROM participants WHERE split_id = ? AND lower(name) = lower(?)`,
+    [splitId, trimmed],
+  );
   if (existing) return toParticipant(existing);
   const id = newId();
-  db.prepare(`INSERT INTO participants (id, split_id, name) VALUES (?, ?, ?)`).run(
+  await db.run(`INSERT INTO participants (id, split_id, name) VALUES (?, ?, ?)`, [
     id,
     splitId,
     trimmed,
-  );
-  return toParticipant(
-    db.prepare(`SELECT * FROM participants WHERE id = ?`).get(id) as ParticipantRow,
-  );
+  ]);
+  const row = await db.get<ParticipantRow>(`SELECT * FROM participants WHERE id = ?`, [id]);
+  return toParticipant(row as ParticipantRow);
 }
 
-export function getParticipants(splitId: string): Participant[] {
-  const rows = getDb()
-    .prepare(`SELECT * FROM participants WHERE split_id = ? ORDER BY joined_at`)
-    .all(splitId) as ParticipantRow[];
+export async function getParticipants(splitId: string): Promise<Participant[]> {
+  const rows = await getDb().all<ParticipantRow>(
+    `SELECT * FROM participants WHERE split_id = ? ORDER BY joined_at`,
+    [splitId],
+  );
   return rows.map(toParticipant);
 }
 
-export function getParticipant(splitId: string, participantId: string): Participant | null {
-  const row = getDb()
-    .prepare(`SELECT * FROM participants WHERE split_id = ? AND id = ?`)
-    .get(splitId, participantId) as ParticipantRow | undefined;
+export async function getParticipant(
+  splitId: string,
+  participantId: string,
+): Promise<Participant | null> {
+  const row = await getDb().get<ParticipantRow>(
+    `SELECT * FROM participants WHERE split_id = ? AND id = ?`,
+    [splitId, participantId],
+  );
   return row ? toParticipant(row) : null;
 }
 
@@ -439,49 +457,46 @@ export function getParticipant(splitId: string, participantId: string): Particip
 /* Claims                                                              */
 /* ------------------------------------------------------------------ */
 
-function loadItemsAndClaims(splitId: string): { items: ReceiptItem[]; claims: Claim[] } {
+async function loadItemsAndClaims(
+  splitId: string,
+): Promise<{ items: ReceiptItem[]; claims: Claim[] }> {
   const db = getDb();
-  const receipt = db
-    .prepare(`SELECT id FROM receipts WHERE split_id = ? ORDER BY created_at LIMIT 1`)
-    .get(splitId) as { id: string } | undefined;
+  const receipt = await db.get<{ id: string }>(
+    `SELECT id FROM receipts WHERE split_id = ? ORDER BY created_at LIMIT 1`,
+    [splitId],
+  );
   if (!receipt) throw new Error("split has no receipt");
-  const items = (
-    db
-      .prepare(`SELECT * FROM receipt_items WHERE receipt_id = ? ORDER BY sort_order`)
-      .all(receipt.id) as ItemRow[]
-  ).map(toItem);
-  const claims = (
-    db
-      .prepare(
-        `SELECT c.item_id, c.participant_id, c.share_n, c.share_d
-         FROM claims c JOIN receipt_items i ON i.id = c.item_id WHERE i.receipt_id = ?`,
-      )
-      .all(receipt.id) as ClaimRow[]
-  ).map(toClaim);
-  return { items, claims };
+  const itemRows = await db.all<ItemRow>(
+    `SELECT * FROM receipt_items WHERE receipt_id = ? ORDER BY sort_order`,
+    [receipt.id],
+  );
+  const claimRows = await db.all<ClaimRow>(
+    `SELECT c.item_id, c.participant_id, c.share_n, c.share_d
+       FROM claims c JOIN receipt_items i ON i.id = c.item_id WHERE i.receipt_id = ?`,
+    [receipt.id],
+  );
+  return { items: itemRows.map(toItem), claims: claimRows.map(toClaim) };
 }
 
 /** Validate + persist claim actions atomically. Returns the apply result. */
-export function applyActions(splitId: string, actions: ClaimAction[]): ApplyResult {
+export async function applyActions(splitId: string, actions: ClaimAction[]): Promise<ApplyResult> {
   const db = getDb();
-  const { items, claims } = loadItemsAndClaims(splitId);
-  const participants = getParticipants(splitId);
+  const { items, claims } = await loadItemsAndClaims(splitId);
+  const participants = await getParticipants(splitId);
   const result = applyClaimActions(items, claims, actions, participants);
 
   if (result.changedItemIds.length) {
-    const tx = db.transaction(() => {
-      const del = db.prepare(`DELETE FROM claims WHERE item_id = ?`);
-      const ins = db.prepare(
-        `INSERT INTO claims (id, item_id, participant_id, share_n, share_d) VALUES (?, ?, ?, ?, ?)`,
-      );
+    await db.tx(async (q) => {
       for (const itemId of result.changedItemIds) {
-        del.run(itemId);
+        await q.run(`DELETE FROM claims WHERE item_id = ?`, [itemId]);
         for (const c of result.claims.filter((c) => c.itemId === itemId)) {
-          ins.run(newId(), c.itemId, c.participantId, c.share.n, c.share.d);
+          await q.run(
+            `INSERT INTO claims (id, item_id, participant_id, share_n, share_d) VALUES (?, ?, ?, ?, ?)`,
+            [newId(), c.itemId, c.participantId, c.share.n, c.share.d],
+          );
         }
       }
     });
-    tx();
   }
   return result;
 }
@@ -490,47 +505,45 @@ export function applyActions(splitId: string, actions: ClaimAction[]): ApplyResu
 /* Payments                                                            */
 /* ------------------------------------------------------------------ */
 
-export function setPaidStatus(
+export async function setPaidStatus(
   splitId: string,
   participantId: string,
   status: PaidStatus,
   amountCents: number,
-): void {
+): Promise<void> {
   const db = getDb();
-  const tx = db.transaction(() => {
-    db.prepare(`UPDATE participants SET paid_status = ? WHERE id = ? AND split_id = ?`).run(
+  await db.tx(async (q) => {
+    await q.run(`UPDATE participants SET paid_status = ? WHERE id = ? AND split_id = ?`, [
       status,
       participantId,
       splitId,
-    );
+    ]);
     if (status !== "unpaid") {
-      db.prepare(
+      await q.run(
         `INSERT INTO payments (id, split_id, participant_id, amount_cents, status) VALUES (?, ?, ?, ?, ?)`,
-      ).run(newId(), splitId, participantId, amountCents, status);
+        [newId(), splitId, participantId, amountCents, status],
+      );
     }
   });
-  tx();
 }
 
 /* ------------------------------------------------------------------ */
 /* Messages & SMS sessions                                             */
 /* ------------------------------------------------------------------ */
 
-export function logMessage(args: {
+export async function logMessage(args: {
   splitId: string;
   participantId?: string | null;
   channel?: MessageChannel;
   direction?: "in" | "out";
   body: string;
   reply?: string | null;
-}): string {
+}): Promise<string> {
   const id = newId();
-  getDb()
-    .prepare(
-      `INSERT INTO messages (id, split_id, participant_id, channel, direction, body, reply)
+  await getDb().run(
+    `INSERT INTO messages (id, split_id, participant_id, channel, direction, body, reply)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
+    [
       id,
       args.splitId,
       args.participantId ?? null,
@@ -538,7 +551,8 @@ export function logMessage(args: {
       args.direction ?? "in",
       args.body,
       args.reply ?? null,
-    );
+    ],
+  );
   return id;
 }
 
@@ -548,20 +562,28 @@ export interface PhoneSession {
   participantId: string | null;
 }
 
-export function getPhoneSession(phone: string): PhoneSession | null {
-  const row = getDb().prepare(`SELECT * FROM phone_sessions WHERE phone = ?`).get(phone) as
-    | { phone: string; split_id: string; participant_id: string | null }
-    | undefined;
+export async function getPhoneSession(phone: string): Promise<PhoneSession | null> {
+  const row = await getDb().get<{
+    phone: string;
+    split_id: string;
+    participant_id: string | null;
+  }>(`SELECT * FROM phone_sessions WHERE phone = ?`, [phone]);
   return row ? { phone: row.phone, splitId: row.split_id, participantId: row.participant_id } : null;
 }
 
-export function setPhoneSession(phone: string, splitId: string, participantId?: string | null): void {
-  getDb()
-    .prepare(
-      `INSERT INTO phone_sessions (phone, split_id, participant_id, updated_at)
-       VALUES (?, ?, ?, datetime('now'))
+export async function setPhoneSession(
+  phone: string,
+  splitId: string,
+  participantId?: string | null,
+): Promise<void> {
+  // Portable timestamp (SQLite datetime('now') shape) passed as a param so the
+  // SQL is identical across drivers — no datetime()/now() dialect functions.
+  const now = new Date().toISOString().slice(0, 19).replace("T", " ");
+  await getDb().run(
+    `INSERT INTO phone_sessions (phone, split_id, participant_id, updated_at)
+       VALUES (?, ?, ?, ?)
        ON CONFLICT(phone) DO UPDATE SET split_id = excluded.split_id,
          participant_id = excluded.participant_id, updated_at = excluded.updated_at`,
-    )
-    .run(phone, splitId, participantId ?? null);
+    [phone, splitId, participantId ?? null, now],
+  );
 }

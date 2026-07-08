@@ -51,7 +51,7 @@ const claimSchema = z
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  if (!splitExists(id)) return Response.json({ error: "not found" }, { status: 404 });
+  if (!(await splitExists(id))) return Response.json({ error: "not found" }, { status: 404 });
 
   let body: unknown;
   try {
@@ -68,14 +68,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
   const data = parsed.data;
 
-  const participant = getParticipant(id, data.participantId);
+  const participant = await getParticipant(id, data.participantId);
   if (!participant) return Response.json({ error: "unknown participant" }, { status: 400 });
 
   let parseResult: ParseResult | null = null;
   let actions: ClaimAction[];
 
   if (data.message !== undefined) {
-    const room = getRoomState(id);
+    const room = await getRoomState(id);
     if (!room) return Response.json({ error: "not found" }, { status: 404 });
 
     const selfClaims = room.items.flatMap((it) =>
@@ -91,7 +91,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     };
     parseResult = parseClaimMessage(data.message, ctx);
 
-    logMessage({
+    await logMessage({
       splitId: id,
       participantId: participant.id,
       channel: "web",
@@ -109,9 +109,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     );
   }
 
-  const applied = applyActions(id, actions);
+  const applied = await applyActions(id, actions);
 
-  const state = getRoomState(id);
+  const state = await getRoomState(id);
   if (!state) return Response.json({ error: "not found" }, { status: 404 });
 
   const response: ClaimResponse = {

@@ -16,7 +16,7 @@ const paySchema = z.object({
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const storedKey = getHostKey(id);
+  const storedKey = await getHostKey(id);
   if (storedKey === null) return Response.json({ error: "not found" }, { status: 404 });
 
   let body: unknown;
@@ -40,18 +40,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return Response.json({ error: "host key required" }, { status: 401 });
   }
 
-  if (!getParticipant(id, participantId)) {
+  if (!(await getParticipant(id, participantId))) {
     return Response.json({ error: "unknown participant" }, { status: 400 });
   }
 
-  const room = getRoomState(id);
+  const room = await getRoomState(id);
   if (!room) return Response.json({ error: "not found" }, { status: 404 });
   const person = room.settlement.people.find((p) => p.participantId === participantId);
   const amountCents = person?.totalCents ?? 0;
 
-  setPaidStatus(id, participantId, status, amountCents);
+  await setPaidStatus(id, participantId, status, amountCents);
 
-  const state = getRoomState(id);
+  const state = await getRoomState(id);
   if (!state) return Response.json({ error: "not found" }, { status: 404 });
   return Response.json(state);
 }

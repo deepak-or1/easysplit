@@ -130,14 +130,44 @@ contracts live in `docs/CONTRACTS.md`.
 npm test        # vitest — split math, claims engine, parser, allocation
 ```
 
+## Deploying to Vercel (free)
+
+Settle runs on Vercel with a free Supabase Postgres + Storage backend. No code
+changes — the storage layer switches drivers by env var.
+
+1. **Push to GitHub.** Commit the repo and push it to a GitHub repository.
+2. **Import to Vercel.** Go to [vercel.com/new](https://vercel.com/new), import
+   the repo, and deploy (framework auto-detected as Next.js).
+3. **Create a Supabase project** (free tier) and set these Environment Variables
+   in Vercel → Project Settings → Environment Variables:
+   - `DATABASE_URL` — the Supabase **Transaction pooler** connection string
+     (Database → Connection string → Transaction pooler, port 6543).
+   - `SUPABASE_URL` — the Project URL (API settings).
+   - `SUPABASE_SERVICE_ROLE_KEY` — the `service_role` key (API settings;
+     server-only secret).
+   - *(optional)* `ANTHROPIC_API_KEY` for real receipt OCR, and `PUBLIC_BASE_URL`
+     set to your deployed origin so SMS room links resolve.
+4. **Redeploy.** On the first request the Postgres schema **auto-bootstraps**
+   (idempotent `CREATE TABLE IF NOT EXISTS …`) — no migration step to run.
+
+Notes:
+
+- With `DATABASE_URL` set the app uses Postgres; unset, it falls back to local
+  SQLite. See `.env.example` → *Deploy (Vercel + Supabase)*.
+- Without the two `SUPABASE_*` storage vars, image uploads **won't persist** on
+  Vercel's ephemeral filesystem — the demo receipt and typed/edited receipts
+  still work end to end; only uploaded photos/QRs are lost.
+
 ## Production checklist
 
-- **Database:** apply `supabase/migration.sql` (the faithful Postgres translation
-  of `src/lib/schema.sql`) and swap `src/lib/db.ts` for a Postgres client. Nothing
-  else touches SQL — the whole app goes through `src/lib/store.ts`.
-- **Object storage:** move uploads off local disk (S3 / Supabase Storage) by
-  swapping `src/lib/files.ts` — only that module and `/api/files/[name]` touch the
-  filesystem.
+- **Database:** set `DATABASE_URL` (Supabase Transaction pooler) — the app runs
+  on Postgres automatically and bootstraps the schema on first request. The DDL
+  lives in `supabase/migration.sql` (a parity mirror of `src/lib/schema.sql`);
+  nothing else touches SQL — the whole app goes through `src/lib/store.ts`.
+- **Object storage:** set `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` — uploads
+  go to a public Supabase Storage bucket (`uploads`, auto-created) and
+  `/api/files/[name]` 302-redirects to the object's public URL. Unset → local
+  disk, as in dev. Only `src/lib/files.ts` and that route touch storage.
 - **SMS:** set the Twilio env vars and point your number's inbound webhook at
   `/api/sms/inbound` (see `docs/TWILIO.md`).
 - **Public URL:** set `PUBLIC_BASE_URL` to your real domain so SMS room links resolve.

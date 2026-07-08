@@ -17,7 +17,7 @@ import { parseVenmoInput } from "@/lib/venmo";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const state = getRoomState(id);
+  const state = await getRoomState(id);
   if (!state) return Response.json({ error: "not found" }, { status: 404 });
   return Response.json(state);
 }
@@ -48,7 +48,7 @@ const patchSchema = z.object({
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const storedKey = getHostKey(id);
+  const storedKey = await getHostKey(id);
   if (storedKey === null) return Response.json({ error: "not found" }, { status: 404 });
   const headerKey = req.headers.get("x-host-key");
   if (!headerKey || headerKey !== storedKey) {
@@ -80,7 +80,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (data.tipValue !== undefined) meta.tipValue = data.tipValue;
   if (data.taxCents !== undefined) meta.taxCents = data.taxCents;
   if (data.status !== undefined) meta.status = data.status;
-  if (Object.keys(meta).length) updateSplitMeta(id, meta);
+  if (Object.keys(meta).length) await updateSplitMeta(id, meta);
 
   if (data.items !== undefined) {
     const items: EditableItem[] = data.items.map((it) => ({
@@ -91,10 +91,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       totalCents: it.totalCents,
       sharedByAll: it.sharedByAll,
     }));
-    replaceItems(id, items);
+    await replaceItems(id, items);
   }
 
-  const state = getRoomState(id);
+  const state = await getRoomState(id);
   if (!state) return Response.json({ error: "not found" }, { status: 404 });
   return Response.json(state);
 }

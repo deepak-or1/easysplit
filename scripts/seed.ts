@@ -32,10 +32,10 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-function main(): void {
+async function main(): Promise<void> {
   /* 1. Host "Priya" creates the split from the demo receipt. Queso Fundido is
      flagged shared-by-all here (it is not flagged in DEMO_RECEIPT). ---------- */
-  const { splitId, hostKey, hostParticipantId } = createSplit({
+  const { splitId, hostKey, hostParticipantId } = await createSplit({
     restaurantName: DEMO_RECEIPT.restaurantName,
     date: TODAY,
     hostName: "Priya",
@@ -54,12 +54,12 @@ function main(): void {
 
   /* 2. Friends join (idempotent by name). --------------------------------- */
   const priya = hostParticipantId;
-  const alex = joinParticipant(splitId, "Alex").id;
-  const maya = joinParticipant(splitId, "Maya").id;
-  const sam = joinParticipant(splitId, "Sam").id;
+  const alex = (await joinParticipant(splitId, "Alex")).id;
+  const maya = (await joinParticipant(splitId, "Maya")).id;
+  const sam = (await joinParticipant(splitId, "Sam")).id;
 
   /* 3. Resolve item ids by name (names are unique in the demo receipt). ---- */
-  const preState = getRoomState(splitId) ?? fail("room vanished after create");
+  const preState = (await getRoomState(splitId)) ?? fail("room vanished after create");
   const itemId = (name: string): string => {
     const item = preState.items.find((i) => i.name === name);
     if (!item) return fail(`item not found: ${name}`);
@@ -84,7 +84,7 @@ function main(): void {
     { type: "set", itemId: itemId("Truffle Fries"), participantId: priya, share: fr(1, 2) },
   ];
 
-  const result = applyActions(splitId, actions);
+  const result = await applyActions(splitId, actions);
   if (result.rejected.length) {
     fail(
       "claims were rejected:\n" +
@@ -93,19 +93,19 @@ function main(): void {
   }
 
   /* 5. A few chat messages so the room feed feels alive. ------------------- */
-  logMessage({
+  await logMessage({
     splitId,
     participantId: maya,
     body: "I had 2 margaritas and the tacos",
     reply: "Got it — 2 Margaritas and Tacos al Pastor. You're all set.",
   });
-  logMessage({
+  await logMessage({
     splitId,
     participantId: sam,
     body: "both IPAs + the coke were mine",
     reply: "Nice — 2 Hazy IPAs and the Mexican Coke are yours.",
   });
-  logMessage({
+  await logMessage({
     splitId,
     participantId: alex,
     body: "burger and I'll split the fries with Priya",
@@ -113,11 +113,11 @@ function main(): void {
   });
 
   /* 6. Compute totals, mark Sam as self-reported paid. --------------------- */
-  const settled = getRoomState(splitId) ?? fail("room vanished after claims");
+  const settled = (await getRoomState(splitId)) ?? fail("room vanished after claims");
   const samTotal = settled.settlement.people.find((p) => p.participantId === sam);
-  setPaidStatus(splitId, sam, "reported", samTotal?.totalCents ?? 0);
+  await setPaidStatus(splitId, sam, "reported", samTotal?.totalCents ?? 0);
 
-  const room = getRoomState(splitId) ?? fail("room vanished after payment");
+  const room = (await getRoomState(splitId)) ?? fail("room vanished after payment");
   print(room, splitId, hostKey);
 
   if (!room.settlement.reconciles) fail("settlement does not reconcile");
@@ -182,4 +182,7 @@ function print(room: RoomState, splitId: string, hostKey: string): void {
   console.log(line + "\n");
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

@@ -15,7 +15,7 @@ const joinSchema = z.object({
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  if (!splitExists(id)) return Response.json({ error: "not found" }, { status: 404 });
+  if (!(await splitExists(id))) return Response.json({ error: "not found" }, { status: 404 });
 
   let body: unknown;
   try {
@@ -31,6 +31,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     });
   }
 
-  const participant = joinParticipant(id, parsed.data.name);
+  const participant = await joinParticipant(id, parsed.data.name);
   return Response.json(participant);
 }
