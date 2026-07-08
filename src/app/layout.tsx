@@ -13,10 +13,26 @@ const dmSans = DM_Sans({
   subsets: ["latin"],
 });
 
+const baseUrl =
+  process.env.PUBLIC_BASE_URL ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000");
+
 export const metadata: Metadata = {
+  metadataBase: new URL(baseUrl),
   title: "Settle — Text a receipt. Split the bill. Venmo settles it.",
   description:
     "The most frictionless way to split a big bill: everyone claims what they got, Venmo handles the money. No accounts. No math. No awkward follow-ups.",
+  openGraph: {
+    siteName: "Settle",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+  },
 };
 
 export const viewport: Viewport = {

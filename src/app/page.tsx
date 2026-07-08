@@ -1,5 +1,6 @@
 import { Card, Money } from "@/components/ui";
 import { LinkButton } from "@/components/new/LinkButton";
+import { Logo } from "@/components/Logo";
 
 /* Landing — the pitch. Warm, confident, one accent color. Server component. */
 
@@ -34,10 +35,8 @@ export default function Home() {
     <div className="flex flex-1 flex-col">
       <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-16 px-5 pb-16 pt-10 sm:pt-16">
         {/* Brand */}
-        <div className="text-center">
-          <span className="font-display text-lg font-semibold tracking-tight text-ink">
-            🧾 Settle
-          </span>
+        <div className="flex justify-center">
+          <Logo />
         </div>
 
         {/* Hero */}

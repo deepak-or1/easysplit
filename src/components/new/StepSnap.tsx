@@ -49,10 +49,12 @@ export function StepSnap({
       ) : (
         <>
           <label className="block cursor-pointer">
+            {/* No `capture` attribute: with it, iOS jumps straight to the camera
+                and hides the photo-library option. Without it, the native sheet
+                offers Take Photo / Photo Library / Choose File. */}
             <input
               type="file"
               accept="image/*"
-              capture="environment"
               className="sr-only"
               onChange={(e) => {
                 const file = e.target.files?.[0];
