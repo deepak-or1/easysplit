@@ -42,7 +42,7 @@ export function isSupportedImage(mime: string): boolean {
   return mime in EXT_BY_MIME;
 }
 
-function useSupabase(): boolean {
+function supabaseStorageEnabled(): boolean {
   return !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
 
@@ -70,7 +70,7 @@ function getSupabase(): Promise<SupabaseClient> {
 export async function saveUpload(buffer: Buffer, mime: string): Promise<string> {
   const ext = EXT_BY_MIME[mime] ?? "bin";
   const name = `${newId()}.${ext}`;
-  if (useSupabase()) {
+  if (supabaseStorageEnabled()) {
     const client = await getSupabase();
     const { error } = await client.storage
       .from(BUCKET)
@@ -88,7 +88,7 @@ export async function saveUpload(buffer: Buffer, mime: string): Promise<string> 
  * mode streams the bytes instead). Returns null for malformed names.
  */
 export function getPublicUrl(name: string): string | null {
-  if (!useSupabase()) return null;
+  if (!supabaseStorageEnabled()) return null;
   if (!NAME_RE.test(name)) return null;
   const base = (process.env.SUPABASE_URL as string).replace(/\/$/, "");
   return `${base}/storage/v1/object/public/${BUCKET}/${name}`;

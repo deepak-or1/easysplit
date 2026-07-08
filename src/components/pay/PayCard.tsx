@@ -9,6 +9,37 @@ import { Card, CopyButton } from "@/components/ui";
  * copy-amount + copy-note are always first-class, the note is always visible,
  * and the host's QR is offered when present.
  */
+/**
+ * Open Venmo with the payment prefilled. On phones, the native deep link
+ * (venmo://paycharge) is the only route that reliably lands on the app's
+ * compose-payment screen with amount + note filled in — universal links to
+ * venmo.com can open the app on the *profile* screen and drop the params.
+ * If the app never takes over (not installed), fall back to the web pay page.
+ */
+function openVenmo(payment: VenmoPayment) {
+  const { webUrl, deepLink } = payment;
+  if (!webUrl) return;
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  if (!isMobile || !deepLink) {
+    window.open(webUrl, "_blank", "noopener,noreferrer");
+    return;
+  }
+  const fallback = window.setTimeout(() => {
+    // Still visible after ~1.6s → the app didn't open; use the web pay page.
+    if (!document.hidden) window.location.href = webUrl;
+  }, 1600);
+  const cancel = () => window.clearTimeout(fallback);
+  window.addEventListener("pagehide", cancel, { once: true });
+  document.addEventListener(
+    "visibilitychange",
+    () => {
+      if (document.hidden) cancel();
+    },
+    { once: true },
+  );
+  window.location.href = deepLink;
+}
+
 export function PayCard({ split, payment }: { split: Split; payment: VenmoPayment }) {
   const host = split.hostName;
 
@@ -16,16 +47,16 @@ export function PayCard({ split, payment }: { split: Split; payment: VenmoPaymen
     <Card className="space-y-4 p-5 animate-[var(--animate-rise)]">
       {payment.webUrl ? (
         <div className="space-y-2">
-          <a
-            href={payment.webUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            onClick={() => openVenmo(payment)}
             className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-venmo px-7 py-3.5 text-base font-semibold text-white shadow-[0_4px_14px_-4px_rgb(0_140_255/0.5)] transition-all hover:bg-venmo-deep active:scale-[0.97]"
           >
             Pay {host} ${payment.amount} on Venmo
-          </a>
+          </button>
           <p className="text-center text-xs text-muted">
-            You&apos;ll confirm inside Venmo — we never touch your account.
+            Amount and note should arrive prefilled — double-check, then confirm inside Venmo.
+            We never touch your account.
           </p>
         </div>
       ) : (

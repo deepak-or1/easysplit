@@ -26,9 +26,13 @@ export interface VenmoPayment {
   amountCents: number;
   amount: string; // "12.34"
   note: string;
-  /** Web link — opens the Venmo app on mobile via app links, profile on desktop. Best-effort prefill. */
+  /**
+   * Web pay link (account.venmo.com/pay) — prefills recipient/amount/note on
+   * desktop web. On phones, prefer `deepLink` first: universal links into the
+   * app can land on the profile screen and drop the query params.
+   */
   webUrl: string | null;
-  /** Native deep link — best-effort; some platforms ignore prefill params. */
+  /** Native deep link — opens the app's compose-payment screen prefilled. */
   deepLink: string | null;
   username: string | null;
 }
@@ -50,13 +54,13 @@ export function buildVenmoPayment(split: Split, person: PersonSettlement): Venmo
   if (!username) {
     return { amountCents: person.totalCents, amount, note, webUrl: null, deepLink: null, username: null };
   }
-  const q = `txn=pay&amount=${encodeURIComponent(amount)}&note=${encodeURIComponent(note)}`;
+  const q = `txn=pay&recipients=${encodeURIComponent(username)}&amount=${encodeURIComponent(amount)}&note=${encodeURIComponent(note)}`;
   return {
     amountCents: person.totalCents,
     amount,
     note,
-    webUrl: `https://venmo.com/u/${encodeURIComponent(username)}?${q}`,
-    deepLink: `venmo://paycharge?txn=pay&recipients=${encodeURIComponent(username)}&amount=${encodeURIComponent(amount)}&note=${encodeURIComponent(note)}`,
+    webUrl: `https://account.venmo.com/pay?${q}`,
+    deepLink: `venmo://paycharge?${q}`,
     username,
   };
 }
