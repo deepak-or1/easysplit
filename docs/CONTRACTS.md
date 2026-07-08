@@ -146,7 +146,7 @@ fries" (qty 1) = `fr(1,2)`. `split` among N people of qty q = `fr(q, N)` each
 
 ## Venmo (`src/lib/venmo.ts`)
 
-`buildVenmoPayment(split, personSettlement, items)` → `{ amount, note, webUrl,
+`buildVenmoPayment(split, personSettlement)` → `{ amount, note, webUrl,
 deepLink, username }`. Pay pages show, in order: big Venmo button (webUrl),
 copy-amount + copy-note buttons (first-class, always shown), username display,
 host QR image if present, and "always confirm inside Venmo" microcopy. If

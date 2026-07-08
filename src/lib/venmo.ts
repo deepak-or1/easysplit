@@ -1,5 +1,5 @@
 import { centsToDollarString } from "./money";
-import type { PersonSettlement, ReceiptItem, Split } from "./types";
+import type { PersonSettlement, Split } from "./types";
 
 /**
  * Venmo settlement is deliberately "dumb and safe": we never log in, automate,
@@ -33,7 +33,7 @@ export interface VenmoPayment {
   username: string | null;
 }
 
-export function buildVenmoNote(split: Split, person: PersonSettlement, items: ReceiptItem[]): string {
+export function buildVenmoNote(split: Split, person: PersonSettlement): string {
   const where = split.restaurantName ? ` at ${split.restaurantName}` : "";
   const itemNames = person.lines.slice(0, 3).map((l) => l.label);
   const more = person.lines.length > 3 ? ` +${person.lines.length - 3} more` : "";
@@ -43,13 +43,9 @@ export function buildVenmoNote(split: Split, person: PersonSettlement, items: Re
   return note.length > 140 ? `${note.slice(0, 137)}…` : note;
 }
 
-export function buildVenmoPayment(
-  split: Split,
-  person: PersonSettlement,
-  items: ReceiptItem[],
-): VenmoPayment {
+export function buildVenmoPayment(split: Split, person: PersonSettlement): VenmoPayment {
   const amount = centsToDollarString(person.totalCents);
-  const note = buildVenmoNote(split, person, items);
+  const note = buildVenmoNote(split, person);
   const username = split.venmoUsername;
   if (!username) {
     return { amountCents: person.totalCents, amount, note, webUrl: null, deepLink: null, username: null };

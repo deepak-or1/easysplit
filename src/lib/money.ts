@@ -60,7 +60,7 @@ export function allocate(totalCents: number, weights: Frac[]): number[] {
     allocated += q;
   }
 
-  let leftover = Number(T - allocated);
+  const leftover = Number(T - allocated);
   // Order indices by remainder desc, index asc.
   const order = rems
     .map((r, i) => ({ r, i }))
