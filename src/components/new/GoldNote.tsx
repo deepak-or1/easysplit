@@ -17,7 +17,7 @@ export function GoldNote({
   return (
     <div
       className={clsx(
-        "flex items-start gap-2.5 rounded-xl bg-gold-soft px-4 py-3 text-sm text-[#9a6d13]",
+        "flex items-start gap-2.5 rounded-xl bg-gold-soft px-4 py-3 text-sm text-[#6f5a00]",
         className,
       )}
     >
@@ -30,7 +30,7 @@ export function GoldNote({
           type="button"
           onClick={onDismiss}
           aria-label="Dismiss"
-          className="-mr-1 shrink-0 rounded-full px-1.5 text-[#9a6d13]/60 hover:text-[#9a6d13]"
+          className="-mr-1 shrink-0 rounded-full px-1.5 text-[#6f5a00]/60 hover:text-[#6f5a00]"
         >
           ✕
         </button>

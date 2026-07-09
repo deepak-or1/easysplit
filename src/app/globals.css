@@ -7,32 +7,36 @@
  * See docs/DESIGN.md for the full direction.
  */
 @theme {
-  --color-paper: #faf5ec; /* page background — warm cream */
-  --color-cream: #f3ead9; /* soft panels, hovers */
-  --color-ink: #241c11; /* primary text — espresso */
-  --color-muted: #8d7c65; /* secondary text */
-  --color-line: #e7dbc4; /* hairlines, borders */
-  --color-card: #fffdf8; /* cards / receipt paper */
-  --color-primary: #e4572e; /* persimmon — CTAs, accents */
-  --color-primary-deep: #c04520; /* pressed / hover */
-  --color-primary-soft: #fbe9e1; /* tinted chips/backgrounds */
-  --color-success: #1f9d62; /* claimed / paid green */
-  --color-success-soft: #e2f3ea;
-  --color-gold: #f2b84b; /* highlights, progress */
-  --color-gold-soft: #fdf3dd;
+  /* "Thermal receipt": the app IS a printed receipt. True-white paper cards on
+     a counter-gray page, soft register-ink text, mono prices, one marker-red
+     accent, highlighter yellow for progress. Venmo blue = pay buttons ONLY. */
+  --color-paper: #f5f5f2; /* page background — the countertop */
+  --color-cream: #efefe9; /* soft panels, bot bubbles, hovers */
+  --color-ink: #161615; /* primary text — thermal print black */
+  --color-muted: #6e6e67; /* secondary text */
+  --color-line: #e3e3dc; /* hairlines, borders */
+  --color-card: #ffffff; /* cards / receipt paper — true white */
+  --color-primary: #e5484d; /* marker red — CTAs, accents */
+  --color-primary-deep: #c6363b; /* pressed / hover */
+  --color-primary-soft: #fdeaea; /* tinted chips/backgrounds */
+  --color-success: #18915b; /* claimed / paid green */
+  --color-success-soft: #e1f4ea;
+  --color-gold: #ffd84d; /* highlighter yellow — progress, unclaimed */
+  --color-gold-soft: #fff4c7;
   --color-venmo: #008cff; /* Venmo brand blue, pay buttons only */
   --color-venmo-deep: #0074d4;
-  --color-danger: #c73a3a;
-  --color-danger-soft: #fbe7e7;
+  --color-danger: #b3261e;
+  --color-danger-soft: #f9e5e3;
 
-  --font-display: var(--font-fraunces), Georgia, serif;
-  --font-sans: var(--font-dm-sans), system-ui, sans-serif;
+  --font-display: var(--font-space-grotesk), "Helvetica Neue", sans-serif;
+  --font-sans: var(--font-schibsted), system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
 
   --radius-card: 1.25rem;
   --radius-pill: 999px;
 
-  --shadow-card: 0 1px 2px rgb(36 28 17 / 0.05), 0 6px 24px -8px rgb(36 28 17 / 0.12);
-  --shadow-pop: 0 8px 32px -8px rgb(36 28 17 / 0.25);
+  --shadow-card: 0 1px 2px rgb(22 22 21 / 0.04), 0 6px 24px -8px rgb(22 22 21 / 0.1);
+  --shadow-pop: 0 8px 32px -8px rgb(22 22 21 / 0.2);
 
   --animate-rise: rise 0.35s cubic-bezier(0.21, 1.02, 0.73, 1) both;
   --animate-pop: pop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
@@ -66,9 +70,11 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Money and quantities always align. */
+/* Money and quantities: mono like a register tape, always aligned. */
 .tabular {
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
 /* Receipt paper with perforated zig-zag top & bottom edges. */
@@ -77,7 +83,7 @@ body {
   background: var(--color-card);
   padding-top: var(--zz);
   padding-bottom: var(--zz);
-  filter: drop-shadow(0 2px 10px rgb(36 28 17 / 0.1));
+  filter: drop-shadow(0 2px 10px rgb(22 22 21 / 0.08));
   clip-path: polygon(
     0% var(--zz),
     2.5% 0%, 5% var(--zz), 7.5% 0%, 10% var(--zz), 12.5% 0%, 15% var(--zz), 17.5% 0%,

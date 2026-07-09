@@ -29,7 +29,7 @@ export function StickyTotal({
         {hasClaims ? (
           <Link
             href={payHref}
-            className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full bg-primary px-5 py-3 text-[15px] font-semibold text-white shadow-[0_4px_14px_-4px_rgb(228_87_46/0.5)] transition-all hover:bg-primary-deep active:scale-[0.97]"
+            className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full bg-primary px-5 py-3 text-[15px] font-semibold text-white shadow-[0_4px_14px_-4px_rgb(229_72_77/0.5)] transition-all hover:bg-primary-deep active:scale-[0.97]"
           >
             Pay {hostName} on Venmo
           </Link>

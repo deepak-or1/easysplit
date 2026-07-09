@@ -34,7 +34,7 @@ export function Button({
           lg: "px-7 py-3.5 text-base w-full",
         }[size],
         {
-          primary: "bg-primary text-white hover:bg-primary-deep shadow-[0_4px_14px_-4px_rgb(228_87_46/0.5)]",
+          primary: "bg-primary text-white hover:bg-primary-deep shadow-[0_4px_14px_-4px_rgb(229_72_77/0.5)]",
           secondary: "bg-cream text-ink hover:bg-line/70 border border-line",
           ghost: "text-muted hover:text-ink hover:bg-cream",
           venmo: "bg-venmo text-white hover:bg-venmo-deep shadow-[0_4px_14px_-4px_rgb(0_140_255/0.5)]",
@@ -131,7 +131,7 @@ export function ProgressBar({ ratio, className }: { ratio: number; className?: s
 }
 
 const AVATAR_COLORS = [
-  "bg-[#E4572E]",
+  "bg-[#E5484D]",
   "bg-[#1F9D62]",
   "bg-[#B0713F]",
   "bg-[#7A5CC4]",
@@ -184,7 +184,7 @@ export function Badge({
         {
           neutral: "bg-cream text-muted",
           success: "bg-success-soft text-success",
-          gold: "bg-gold-soft text-[#9a6d13]",
+          gold: "bg-gold-soft text-[#6f5a00]",
           primary: "bg-primary-soft text-primary-deep",
           danger: "bg-danger-soft text-danger",
         }[tone],

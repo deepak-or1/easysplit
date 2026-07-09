@@ -17,7 +17,7 @@ const SIZES: Record<Size, string> = {
 };
 
 const VARIANTS: Record<Variant, string> = {
-  primary: "bg-primary text-white hover:bg-primary-deep shadow-[0_4px_14px_-4px_rgb(228_87_46/0.5)]",
+  primary: "bg-primary text-white hover:bg-primary-deep shadow-[0_4px_14px_-4px_rgb(229_72_77/0.5)]",
   secondary: "bg-cream text-ink hover:bg-line/70 border border-line",
   ghost: "text-muted hover:text-ink hover:bg-cream",
   venmo: "bg-venmo text-white hover:bg-venmo-deep shadow-[0_4px_14px_-4px_rgb(0_140_255/0.5)]",

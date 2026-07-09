@@ -16,12 +16,12 @@ function Mark({ px }: { px: number }) {
     <svg width={px} height={px} viewBox="0 0 32 32" fill="none">
       <path
         d="M6 6a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3v21.2l-3.33-2.2-3.34 2.2-3.33-2.2-3.33 2.2-3.34-2.2L6 27.2V6Z"
-        fill="#E4572E"
+        fill="#E5484D"
       />
-      <rect x="10" y="9" width="12" height="2.2" rx="1.1" fill="#FAF5EC" opacity="0.95" />
-      <rect x="10" y="14" width="8.5" height="2.2" rx="1.1" fill="#FAF5EC" opacity="0.95" />
-      <rect x="10" y="19" width="5" height="2.2" rx="1.1" fill="#FAF5EC" opacity="0.95" />
-      <circle cx="20.8" cy="20.1" r="1.7" fill="#F2B84B" />
+      <rect x="10" y="9" width="12" height="2.2" rx="1.1" fill="#FFFFFF" opacity="0.95" />
+      <rect x="10" y="14" width="8.5" height="2.2" rx="1.1" fill="#FFFFFF" opacity="0.95" />
+      <rect x="10" y="19" width="5" height="2.2" rx="1.1" fill="#FFFFFF" opacity="0.95" />
+      <circle cx="20.8" cy="20.1" r="1.7" fill="#FFD84D" />
     </svg>
   );
 }
@@ -43,8 +43,8 @@ export default async function RoomOgImage({ params }: { params: Promise<{ id: st
           display: "flex",
           flexDirection: "column",
           justifyContent: "center",
-          background: "#FAF5EC",
-          color: "#241C11",
+          background: "#FFFFFF",
+          color: "#161615",
           padding: 88,
         }}
       >
@@ -69,7 +69,7 @@ export default async function RoomOgImage({ params }: { params: Promise<{ id: st
             <div
               style={{
                 display: "flex",
-                background: "#E4572E",
+                background: "#E5484D",
                 color: "#FFFFFF",
                 borderRadius: 999,
                 padding: "10px 30px",
@@ -79,9 +79,9 @@ export default async function RoomOgImage({ params }: { params: Promise<{ id: st
               {total}
             </div>
           )}
-          {host && <div style={{ color: "#8D7C65" }}>{`hosted by ${host}`}</div>}
+          {host && <div style={{ color: "#6E6E67" }}>{`hosted by ${host}`}</div>}
         </div>
-        <div style={{ marginTop: 44, fontSize: 34, color: "#8D7C65" }}>
+        <div style={{ marginTop: 44, fontSize: 34, color: "#6E6E67" }}>
           Tap the link and claim what you got — Venmo settles it.
         </div>
       </div>

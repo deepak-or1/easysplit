@@ -151,7 +151,7 @@ export function StepCheck({
           tipLabel="Tip / service (on receipt)"
         />
         {mismatch && (
-          <p className="text-xs leading-snug text-[#9a6d13]">
+          <p className="text-xs leading-snug text-[#6f5a00]">
             Heads up — the receipt&apos;s printed subtotal ({formatCents(ocr)}) doesn&apos;t match
             these items ({formatCents(subtotalCents)}). Worth a second look.
           </p>

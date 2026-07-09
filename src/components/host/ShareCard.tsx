@@ -28,7 +28,7 @@ export function ShareCard({ splitId }: { splitId: string }) {
     QRCode.toDataURL(link, {
       width: 320,
       margin: 1,
-      color: { dark: "#241c11", light: "#fffdf8" },
+      color: { dark: "#161615", light: "#ffffff" },
     })
       .then((dataUrl) => {
         if (!cancelled) setQr(dataUrl);

@@ -1,23 +1,26 @@
 # Settle — design direction
 
-**Feel:** a great dinner with friends, not an accounting tool. Warm receipt
-paper, one confident accent color, playful-but-calm serif headlines, chat-like
-energy in the room. Mobile-first — assume a phone held at the table; desktop
-just gets more air (`max-w-md`/`max-w-lg` columns, centered).
+**Feel:** "thermal receipt" — the app IS a freshly printed receipt. True-white
+paper cards on a counter-gray page, register-ink text, mono prices, one
+marker-red accent, highlighter-yellow progress. Clean, crisp, a little diner
+energy; never an accounting tool. Mobile-first — assume a phone held at the
+table; desktop just gets more air (`max-w-md`/`max-w-lg` columns, centered).
 
 ## Tokens (already defined in `src/app/globals.css` — use these classes)
 
-- Surfaces: `bg-paper` (page), `bg-card` (cards/receipt), `bg-cream` (soft panels)
-- Text: `text-ink`, `text-muted`; hairlines `border-line`
-- Accent: `bg-primary` / `text-primary` (persimmon #E4572E) — CTAs and moments
-  of delight only, never large fills
-- States: `bg-success`/`text-success` (claimed, paid), `bg-gold` (progress,
-  highlights), `text-danger`
+- Surfaces: `bg-paper` (page — countertop gray #F5F5F2), `bg-card`
+  (receipt white #FFFFFF), `bg-cream` (soft panels #EFEFE9)
+- Text: `text-ink` (#161615), `text-muted`; hairlines `border-line`
+- Accent: `bg-primary` / `text-primary` (marker red #E5484D) — CTAs and
+  moments of delight only, never large fills
+- States: `bg-success`/`text-success` (claimed, paid), `bg-gold` (highlighter
+  yellow #FFD84D — progress, unclaimed), `text-danger`
 - Venmo actions ONLY: `bg-venmo` (brand blue) — a pay button should be
   unmistakably "the Venmo button"
-- Type: `font-display` (Fraunces — headlines, money totals, restaurant names),
-  `font-sans` (DM Sans — everything else). Money/qty always with `.tabular`
-  (the `Money` component does this).
+- Type: `font-display` (Space Grotesk — headlines, restaurant names),
+  `font-sans` (Schibsted Grotesk — everything else). Money/qty always with
+  `.tabular` — which now renders IBM Plex Mono, like register tape (the
+  `Money` component does this).
 - Radii: `rounded-card` for cards, `rounded-full` for buttons/chips.
 - Motion: `animate-[var(--animate-rise)]` for entering cards,
   `animate-[var(--animate-pop)]` for claim confirmations. Subtle. Never

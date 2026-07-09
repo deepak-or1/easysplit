@@ -15,7 +15,7 @@ export function UnclaimedPanel({
   return (
     <Card className="animate-[var(--animate-rise)] space-y-3 border-gold/50 bg-gold-soft p-5">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="font-display text-lg font-semibold text-[#9a6d13]">Still unclaimed</h2>
+        <h2 className="font-display text-lg font-semibold text-[#6f5a00]">Still unclaimed</h2>
         <Badge tone="gold">
           <Money cents={unclaimed.totalCents} />
         </Badge>
@@ -35,7 +35,7 @@ export function UnclaimedPanel({
       )}
 
       {(unclaimed.taxCents > 0 || unclaimed.tipCents > 0) && (
-        <div className="space-y-1 border-t border-gold/40 pt-2 text-sm text-[#9a6d13]">
+        <div className="space-y-1 border-t border-gold/40 pt-2 text-sm text-[#6f5a00]">
           {unclaimed.taxCents > 0 && (
             <div className="flex justify-between">
               <span>Tax share</span>
@@ -51,7 +51,7 @@ export function UnclaimedPanel({
         </div>
       )}
 
-      <p className="text-sm text-[#9a6d13]">Still unclaimed — nudge the table.</p>
+      <p className="text-sm text-[#6f5a00]">Still unclaimed — nudge the table.</p>
     </Card>
   );
 }
