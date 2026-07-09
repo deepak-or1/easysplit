@@ -63,11 +63,20 @@
   }
 }
 
+/* The page must NEVER scroll sideways on a phone. `clip` (not `hidden`)
+   forbids horizontal overflow without creating a scroll container, so
+   position: sticky (the bottom pay bar) keeps working. */
+html,
+body {
+  overflow-x: clip;
+}
+
 body {
   background: var(--color-paper);
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-tap-highlight-color: transparent;
+  overflow-wrap: break-word; /* long tokens (URLs, keysmash) wrap instead of stretching layouts */
 }
 
 /* Money and quantities: mono like a register tape, always aligned. */

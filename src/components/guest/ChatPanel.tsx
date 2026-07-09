@@ -7,7 +7,7 @@ import { Avatar, Chip } from "@/components/ui";
 
 function BotBubble({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mt-1.5 ml-9 max-w-[85%] rounded-2xl rounded-tl-sm bg-cream px-3.5 py-2 text-sm text-ink">
+    <div className="mt-1.5 ml-9 max-w-[85%] break-words rounded-2xl rounded-tl-sm bg-cream px-3.5 py-2 text-sm text-ink">
       {children}
     </div>
   );
@@ -66,7 +66,7 @@ export function ChatPanel({
                   <Avatar name={m.participantName ?? "?"} size="sm" />
                   <div className="min-w-0">
                     <p className="text-xs font-semibold text-muted">{label}</p>
-                    <p className="text-[15px] leading-snug text-ink">{m.body}</p>
+                    <p className="break-words text-[15px] leading-snug text-ink">{m.body}</p>
                   </div>
                 </div>
                 {m.reply && <BotBubble>{m.reply}</BotBubble>}
