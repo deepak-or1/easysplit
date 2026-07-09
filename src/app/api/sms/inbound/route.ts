@@ -1,6 +1,9 @@
 import crypto from "node:crypto";
 import { handleInboundSms } from "@/lib/sms";
 
+/** Allow up to 2 minutes: the OCR escalation pass on hard receipts can run ~30s+. */
+export const maxDuration = 120;
+
 /**
  * POST /api/sms/inbound — Twilio-compatible inbound SMS/MMS webhook.
  *

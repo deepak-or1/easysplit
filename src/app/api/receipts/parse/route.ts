@@ -9,6 +9,9 @@ import type { ReceiptParseResponse } from "@/lib/types";
  * Persists nothing. See docs/CONTRACTS.md §POST /api/receipts/parse.
  */
 
+/** Allow up to 2 minutes: the OCR escalation pass on hard receipts can run ~30s+. */
+export const maxDuration = 120;
+
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
 type DecodedUpload = { buffer: Buffer; mime: string } | { error: string };
