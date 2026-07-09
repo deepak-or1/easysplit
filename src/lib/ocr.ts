@@ -66,38 +66,30 @@ export async function parseReceiptImage(
 
   try {
     const client = new Anthropic();
-    const response = await client.messages.create({
-      // Sonnet extracts receipts as well as Opus at ~40% of the cost; override
-      // with OCR_MODEL=claude-opus-4-8 if you want the ceiling. Thinking off +
-      // a tight max_tokens keep the per-parse spend small and predictable.
-      model: process.env.OCR_MODEL ?? "claude-sonnet-5",
-      max_tokens: 2500,
-      thinking: { type: "disabled" },
-      output_config: { format: { type: "json_schema", schema: RECEIPT_SCHEMA } },
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "image",
-              source: { type: "base64", media_type: mime as SupportedMedia, data: buffer.toString("base64") },
-            },
-            {
-              type: "text",
-              text: "Extract this restaurant receipt into the schema. All money values are integer cents. If a line shows quantity > 1, set quantity and unitPriceCents accordingly (totalCents = quantity × unitPriceCents when consistent). Exclude subtotal/tax/tip/total lines from items. Use 0 for taxCents/tipCents if not printed.",
-            },
-          ],
-        },
-      ],
-    });
 
-    if (response.stop_reason === "refusal") {
-      throw new Error("model declined the request");
+    // Pass 1: fast + cheap. The printed subtotal acts as a checksum — when the
+    // extracted line items don't sum to it, the read is suspect.
+    const first = await ocrPass(client, buffer, mime, "fast");
+    const firstDelta = subtotalDelta(first);
+    if (firstDelta <= CHECKSUM_TOLERANCE_CENTS) {
+      return { source: "llm", receipt: first };
     }
-    const text = response.content.find((b) => b.type === "text");
-    if (!text || text.type !== "text") throw new Error("no text block in response");
-    const receipt = normalizeParsed(JSON.parse(text.text) as ParsedReceipt);
-    return { source: "llm", receipt };
+
+    // Pass 2 (hard receipts only — rotated, shadowed, crumpled): strongest
+    // model with reasoning enabled and the checksum failure spelled out.
+    const second = await ocrPass(client, buffer, mime, "strong", first);
+    const secondDelta = subtotalDelta(second);
+    const best = secondDelta <= firstDelta ? second : first;
+    const bestDelta = Math.min(firstDelta, secondDelta);
+    if (bestDelta <= CHECKSUM_TOLERANCE_CENTS) {
+      return { source: "llm", receipt: best };
+    }
+    return {
+      source: "llm",
+      receipt: best,
+      warning:
+        "The line items don't quite add up to the receipt's printed subtotal — worth a quick once-over below.",
+    };
   } catch (err) {
     return {
       source: "mock",
@@ -105,6 +97,69 @@ export async function parseReceiptImage(
       warning: `OCR failed (${err instanceof Error ? err.message : "unknown error"}) — returning a demo receipt to edit.`,
     };
   }
+}
+
+const CHECKSUM_TOLERANCE_CENTS = 50;
+
+/** |Σ line items − printed subtotal|, or 0 when no subtotal was printed/read
+ * (no checksum available — nothing to disagree with). */
+function subtotalDelta(r: ParsedReceipt): number {
+  const itemsSum = r.items.reduce((s, i) => s + i.totalCents, 0);
+  if (r.subtotalCents <= 0 || r.subtotalCents === itemsSum) return 0;
+  return Math.abs(itemsSum - r.subtotalCents);
+}
+
+const BASE_PROMPT =
+  "Extract this restaurant receipt into the schema. All money values are integer cents. " +
+  "The photo may be rotated, dim, or partially shadowed — align each item name to ITS OWN " +
+  "price column entry carefully. If a line shows quantity > 1, set quantity and unitPriceCents " +
+  "accordingly (totalCents = quantity × unitPriceCents when consistent). Zero-priced " +
+  "package sub-lines (e.g. drink choices under an all-you-can order) are not items. Exclude " +
+  "subtotal/tax/tip/service-charge/total/payment lines from items, but DO report the printed " +
+  "subtotal, tax, and any tip or service charge in their fields (0 if not printed). Before " +
+  "answering, verify your line totals sum to the printed subtotal; if they don't, re-read the " +
+  "misaligned lines and fix them.";
+
+async function ocrPass(
+  client: Anthropic,
+  buffer: Buffer,
+  mime: string,
+  tier: "fast" | "strong",
+  previous?: ParsedReceipt,
+): Promise<ParsedReceipt> {
+  const escalationHint = previous
+    ? `\n\nIMPORTANT: a previous read of this exact receipt extracted items summing to ${previous.items
+        .reduce((s, i) => s + i.totalCents, 0)} cents, but the printed subtotal is ${previous.subtotalCents} cents — so at least one line was misread or mis-aligned. Read slowly, match every name to its own price, and make your line totals reconcile with the printed subtotal.`
+    : "";
+  const response = await client.messages.create({
+    // fast: Sonnet, no thinking (~1.3¢) — right for the ~90% of receipts that
+    // pass the checksum. strong: Opus with adaptive reasoning (~4-6¢) — only
+    // pays out on reads the checksum already flagged as wrong.
+    model:
+      tier === "fast"
+        ? (process.env.OCR_MODEL ?? "claude-sonnet-5")
+        : (process.env.OCR_MODEL_STRONG ?? "claude-opus-4-8"),
+    max_tokens: tier === "fast" ? 2500 : 8000,
+    thinking: tier === "fast" ? { type: "disabled" } : { type: "adaptive" },
+    output_config: { format: { type: "json_schema", schema: RECEIPT_SCHEMA } },
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: { type: "base64", media_type: mime as SupportedMedia, data: buffer.toString("base64") },
+          },
+          { type: "text", text: BASE_PROMPT + escalationHint },
+        ],
+      },
+    ],
+  });
+
+  if (response.stop_reason === "refusal") throw new Error("model declined the request");
+  const text = response.content.find((b) => b.type === "text");
+  if (!text || text.type !== "text") throw new Error("no text block in response");
+  return normalizeParsed(JSON.parse(text.text) as ParsedReceipt);
 }
 
 /** Defensive cleanup: OCR output is never trusted blindly. */
