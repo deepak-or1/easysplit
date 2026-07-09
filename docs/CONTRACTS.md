@@ -1,4 +1,4 @@
-# Settle — API contracts & module boundaries
+# EasySplit — API contracts & module boundaries
 
 This is the source of truth for request/response shapes. UI code calls the
 typed helpers in `src/lib/api.ts` (never raw `fetch`); API routes call

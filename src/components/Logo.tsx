@@ -1,7 +1,7 @@
 import clsx from "clsx";
 
 /**
- * The Settle mark: a persimmon receipt stub with a zigzag tear — the same
+ * The EasySplit mark: a persimmon receipt stub with a zigzag tear — the same
  * motif as the in-app receipt cards. Keep it simple; it has to read at 16px.
  */
 export function LogoMark({ className }: { className?: string }) {
@@ -43,7 +43,7 @@ export function Logo({
           wordClassName,
         )}
       >
-        Settle
+        EasySplit
       </span>
     </span>
   );

@@ -19,7 +19,7 @@ import {
 import type { Participant, ParsedReceipt } from "./types";
 
 /**
- * SMS-first brain for Settle.
+ * SMS-first brain for EasySplit.
  *
  * `handleInboundSms` is the single, transport-agnostic entry point: it takes a
  * normalized inbound message and returns the plain-text reply. The Twilio route
@@ -219,7 +219,7 @@ async function handleClaim(input: InboundSms, splitId: string, self: Participant
 /** First-contact help for a phone with no active session. */
 function noSessionHelp(): string {
   return (
-    "👋 I'm Settle. Text a photo of a receipt to start a new split, or reply " +
+    "👋 I'm EasySplit. Text a photo of a receipt to start a new split, or reply " +
     '"join <code> <your name>" to join one a friend already started.'
   );
 }

@@ -9,7 +9,7 @@ import { formatCents } from "@/lib/money";
  */
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
-export const alt = "Claim what you got — Settle";
+export const alt = "Claim what you got — EasySplit";
 
 function Mark({ px }: { px: number }) {
   return (
@@ -50,7 +50,7 @@ export default async function RoomOgImage({ params }: { params: Promise<{ id: st
       >
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
           <Mark px={56} />
-          <div style={{ fontSize: 38, fontWeight: 700, letterSpacing: -0.5 }}>Settle</div>
+          <div style={{ fontSize: 38, fontWeight: 700, letterSpacing: -0.5 }}>EasySplit</div>
         </div>
         <div
           style={{

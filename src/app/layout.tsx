@@ -28,11 +28,11 @@ const baseUrl =
 
 export const metadata: Metadata = {
   metadataBase: new URL(baseUrl),
-  title: "Settle — Text a receipt. Split the bill. Venmo settles it.",
+  title: "EasySplit — Text a receipt. Split the bill. Venmo settles it.",
   description:
     "The most frictionless way to split a big bill: everyone claims what they got, Venmo handles the money. No accounts. No math. No awkward follow-ups.",
   openGraph: {
-    siteName: "Settle",
+    siteName: "EasySplit",
     type: "website",
   },
   twitter: {

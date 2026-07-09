@@ -1,8 +1,8 @@
-# Settle
+# EasySplit
 
 **Text a receipt, everyone claims their food, Venmo settles it.** The host snaps
 a photo of the bill, shares one link, and each friend taps (or just types "I had
-the burger and a marg") to claim their items. Settle splits tax and tip
+the burger and a marg") to claim their items. EasySplit splits tax and tip
 proportionally, reconciles to the exact cent, and hands everyone a prefilled
 Venmo link. No accounts, no spreadsheet, no "who owes what" group text.
 
@@ -34,7 +34,7 @@ claim a few items. That's the whole product.
 
 ## What's real vs mocked
 
-Everything that makes Settle *work* is real. The two integrations that need
+Everything that makes EasySplit *work* is real. The two integrations that need
 third-party credentials degrade gracefully to local mocks.
 
 | Capability | Status |
@@ -57,7 +57,7 @@ curl -X POST -d "From=%2B15550001111&Body=hi&NumMedia=0" \
 
 ## Environment
 
-All variables are optional (see `.env.example`). With none set, Settle runs
+All variables are optional (see `.env.example`). With none set, EasySplit runs
 demo OCR + local SQLite + simulated SMS.
 
 | Variable | Purpose |
@@ -132,7 +132,7 @@ npm test        # vitest — split math, claims engine, parser, allocation
 
 ## Deploying to Vercel (free)
 
-Settle runs on Vercel with a free Supabase Postgres + Storage backend. No code
+EasySplit runs on Vercel with a free Supabase Postgres + Storage backend. No code
 changes — the storage layer switches drivers by env var.
 
 1. **Push to GitHub.** Commit the repo and push it to a GitHub repository.

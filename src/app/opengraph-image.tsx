@@ -3,7 +3,7 @@ import { ImageResponse } from "next/og";
 /** Link-preview card for the site (iMessage, WhatsApp, Slack, Twitter…). */
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
-export const alt = "Settle — Text a receipt. Split the bill. Venmo settles it.";
+export const alt = "EasySplit — Text a receipt. Split the bill. Venmo settles it.";
 
 function Mark({ px }: { px: number }) {
   return (
@@ -38,7 +38,7 @@ export default function OgImage() {
       >
         <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
           <Mark px={96} />
-          <div style={{ fontSize: 64, fontWeight: 700, letterSpacing: -1 }}>Settle</div>
+          <div style={{ fontSize: 64, fontWeight: 700, letterSpacing: -1 }}>EasySplit</div>
         </div>
         <div
           style={{

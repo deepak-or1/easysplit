@@ -1,6 +1,6 @@
-# Wiring Settle to Twilio SMS
+# Wiring EasySplit to Twilio SMS
 
-Settle is **SMS-first**: a host texts a photo of a receipt, friends text `join`
+EasySplit is **SMS-first**: a host texts a photo of a receipt, friends text `join`
 and what they ordered, and everyone gets a Venmo pay link back. The whole flow
 runs **fully mocked with zero credentials** — the inbound webhook works out of
 the box against `localhost`, no Twilio account required. This doc explains how

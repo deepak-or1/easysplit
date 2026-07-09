@@ -10,11 +10,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const room = await getRoomState(id).catch(() => null);
-  if (!room) return { title: "Split the bill · Settle" };
+  if (!room) return { title: "Split the bill · EasySplit" };
   const restaurant = room.split.restaurantName?.trim() || "Dinner";
   const total = formatCents(room.settlement.grandTotalCents);
   return {
-    title: `${restaurant} · Settle`,
+    title: `${restaurant} · EasySplit`,
     description: `${room.split.hostName} split the ${total} bill from ${restaurant}. Tap to claim what you got — Venmo settles it.`,
   };
 }

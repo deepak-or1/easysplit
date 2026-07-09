@@ -1,5 +1,5 @@
 /**
- * Domain types for Settle. All money is integer cents. All fractional
+ * Domain types for EasySplit. All money is integer cents. All fractional
  * ownership is an exact rational Frac {n, d} — never floats — so totals
  * always reconcile to the receipt total.
  */

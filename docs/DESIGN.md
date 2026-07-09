@@ -1,4 +1,4 @@
-# Settle — design direction
+# EasySplit — design direction
 
 **Feel:** "thermal receipt" — the app IS a freshly printed receipt. True-white
 paper cards on a counter-gray page, register-ink text, mono prices, one

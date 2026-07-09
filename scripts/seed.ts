@@ -1,5 +1,5 @@
 /**
- * Seed a fully-claimed demo split so you can see Settle working end to end
+ * Seed a fully-claimed demo split so you can see EasySplit working end to end
  * without touching the UI. Run it, then open the printed room link.
  *
  *   npm run seed
@@ -139,7 +139,7 @@ function print(room: RoomState, splitId: string, hostKey: string): void {
 
   const line = "─".repeat(64);
   console.log(`\n${line}`);
-  console.log("  Settle — demo split seeded 🎉");
+  console.log("  EasySplit — demo split seeded 🎉");
   console.log(line);
   console.log(`  Restaurant   ${room.split.restaurantName} · ${room.split.date}`);
   console.log(`  Bill         ${formatCents(settlement.grandTotalCents)}` +

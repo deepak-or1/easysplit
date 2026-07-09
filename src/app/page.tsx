@@ -117,7 +117,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-line/70 py-6 text-center text-xs text-muted">
-        <p className="font-display text-sm font-semibold text-ink">🧾 Settle</p>
+        <p className="font-display text-sm font-semibold text-ink">🧾 EasySplit</p>
         <p className="mt-1">Made for good dinners. We never touch your Venmo account.</p>
       </footer>
     </div>
