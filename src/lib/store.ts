@@ -587,3 +587,40 @@ export async function setPhoneSession(
     [phone, splitId, participantId ?? null, now],
   );
 }
+
+/* ------------------------------------------------------------------ */
+/* Rate limiting                                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Best-effort fixed-window rate limiter backed by the DB (so it works across
+ * serverless instances with zero extra infra). Returns true when the call is
+ * allowed. Approximate under concurrency — fine, it guards spend, not auth.
+ */
+export async function checkRateLimit(
+  key: string,
+  limit: number,
+  windowSecs: number,
+): Promise<boolean> {
+  const db = getDb();
+  const now = Date.now();
+  const nowIso = new Date(now).toISOString();
+  return db.tx(async (q) => {
+    const row = await q.get<{ window_start: string; count: number }>(
+      `SELECT window_start, count FROM rate_limits WHERE key = ?`,
+      [key],
+    );
+    const expired = !row || now - Date.parse(row.window_start) > windowSecs * 1000;
+    if (expired) {
+      await q.run(
+        `INSERT INTO rate_limits (key, window_start, count) VALUES (?, ?, 1)
+         ON CONFLICT(key) DO UPDATE SET window_start = excluded.window_start, count = 1`,
+        [key, nowIso],
+      );
+      return true;
+    }
+    if (row.count >= limit) return false;
+    await q.run(`UPDATE rate_limits SET count = count + 1 WHERE key = ?`, [key]);
+    return true;
+  });
+}

@@ -67,8 +67,12 @@ export async function parseReceiptImage(
   try {
     const client = new Anthropic();
     const response = await client.messages.create({
-      model: "claude-opus-4-8",
-      max_tokens: 4096,
+      // Sonnet extracts receipts as well as Opus at ~40% of the cost; override
+      // with OCR_MODEL=claude-opus-4-8 if you want the ceiling. Thinking off +
+      // a tight max_tokens keep the per-parse spend small and predictable.
+      model: process.env.OCR_MODEL ?? "claude-sonnet-5",
+      max_tokens: 2500,
+      thinking: { type: "disabled" },
       output_config: { format: { type: "json_schema", schema: RECEIPT_SCHEMA } },
       messages: [
         {

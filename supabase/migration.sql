@@ -104,3 +104,11 @@ CREATE TABLE IF NOT EXISTS phone_sessions (
   participant_id TEXT,
   updated_at     TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD HH24:MI:SS')
 );
+
+-- Best-effort rate limiting for money-spending endpoints (LLM OCR).
+
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key          TEXT PRIMARY KEY,
+  window_start TEXT NOT NULL,
+  count        INTEGER NOT NULL DEFAULT 1
+);

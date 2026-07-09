@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { parseReceiptImage } from "@/lib/ocr";
 import { DEMO_RECEIPT } from "@/lib/demo-receipt";
+import { checkRateLimit } from "@/lib/store";
 import type { ReceiptParseResponse } from "@/lib/types";
 
 /**
@@ -48,6 +49,21 @@ export async function POST(req: Request) {
 
   const decoded = decodeDataUrl(parsed.data.imageDataUrl);
   if ("error" in decoded) return Response.json({ error: decoded.error }, { status: 400 });
+
+  // Real OCR spends money — gate it per-IP AND globally so neither one hot
+  // client nor a distributed scraper can drain the API credits. The demo path
+  // above is free and never limited. 429s degrade gracefully in the UI.
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
+  const [ipOk, globalOk] = await Promise.all([
+    checkRateLimit(`ocr:ip:${ip}`, 10, 60 * 60),
+    checkRateLimit("ocr:global", 60, 60 * 60),
+  ]);
+  if (!ipOk || !globalOk) {
+    return Response.json(
+      { error: "Receipt reading is taking a breather — try again in a bit, or add items by hand." },
+      { status: 429 },
+    );
+  }
 
   const result = await parseReceiptImage(decoded.buffer, decoded.mime);
   return Response.json(result);

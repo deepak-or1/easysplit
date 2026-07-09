@@ -90,3 +90,11 @@ CREATE TABLE IF NOT EXISTS phone_sessions (
   participant_id TEXT,
   updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Best-effort rate limiting for endpoints that spend money (LLM OCR). Keys
+-- look like "ocr:ip:1.2.3.4" or "ocr:global"; approximate counting is fine.
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key          TEXT PRIMARY KEY,
+  window_start TEXT NOT NULL,
+  count        INTEGER NOT NULL DEFAULT 1
+);

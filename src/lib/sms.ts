@@ -7,6 +7,7 @@ import { formatCents } from "./money";
 import { settlementFor } from "./split-math";
 import {
   applyActions,
+  checkRateLimit,
   createSplit,
   getPhoneSession,
   getRoomState,
@@ -80,6 +81,16 @@ function demoReceipt(): ParsedReceipt {
  * shareable room link + the host's private dashboard link.
  */
 async function handleReceiptMms(input: InboundSms): Promise<string> {
+  // Real OCR spends money — cap it per phone number and share the same global
+  // hourly budget as the web endpoint so SMS can't be used to drain credits.
+  const [phoneOk, globalOk] = await Promise.all([
+    checkRateLimit(`ocr:phone:${input.from}`, 5, 60 * 60),
+    checkRateLimit("ocr:global", 60, 60 * 60),
+  ]);
+  if (!phoneOk || !globalOk) {
+    return "Whoa — that's a lot of receipts! Give it a little while and text the photo again.";
+  }
+
   // Only fetch when we have creds AND a URL; otherwise (or on failure) demo.
   const media = input.mediaUrls[0] ? await fetchMedia(input.mediaUrls[0]) : null;
   const receipt = media

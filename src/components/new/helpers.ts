@@ -118,6 +118,38 @@ export function buildCreatePayload(draft: Draft): CreateSplitPayload {
   };
 }
 
+/**
+ * Downscale an image data URL to at most `maxEdge` px on its long side and
+ * re-encode as JPEG. Receipt photos off a phone are 8–48MP; the OCR model
+ * reads a 2000px receipt just as well, at a fraction of the image tokens
+ * (and upload time). Falls back to the original on any failure.
+ */
+export function downscaleImageDataUrl(dataUrl: string, maxEdge = 2000): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      if (!w || !h) return resolve(dataUrl);
+      const scale = Math.min(1, maxEdge / Math.max(w, h));
+      if (scale === 1) return resolve(dataUrl);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(w * scale);
+      canvas.height = Math.round(h * scale);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return resolve(dataUrl);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      try {
+        resolve(canvas.toDataURL("image/jpeg", 0.85));
+      } catch {
+        resolve(dataUrl);
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
 /** Read a File as a base64 data URL (for preview + upload). */
 export function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {

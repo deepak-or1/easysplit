@@ -141,6 +141,12 @@ CREATE TABLE IF NOT EXISTS phone_sessions (
   participant_id TEXT,
   updated_at     TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD HH24:MI:SS')
 );
+
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key          TEXT PRIMARY KEY,
+  window_start TEXT NOT NULL,
+  count        INTEGER NOT NULL DEFAULT 1
+);
 `;
 
 interface PgGlobals {
@@ -248,29 +254,37 @@ function makeSqliteAdapter(): Db {
     const db = await getSqlite();
     db.prepare(sql).run(...params);
   };
-  const tx = async <T>(fn: (q: Query) => Promise<T>): Promise<T> => {
-    const db = await getSqlite();
-    // better-sqlite3's own db.transaction() rejects async callbacks, so we drive
-    // BEGIN/COMMIT/ROLLBACK manually. Every op underneath is synchronous and the
-    // app awaits store calls sequentially, so no nested/interleaved BEGIN occurs.
-    const q: Query = {
-      get: async <U>(sql: string, params: unknown[] = []) =>
-        db.prepare(sql).get(...params) as U | undefined,
-      all: async <U>(sql: string, params: unknown[] = []) =>
-        db.prepare(sql).all(...params) as U[],
-      run: async (sql: string, params: unknown[] = []) => {
-        db.prepare(sql).run(...params);
-      },
+  // better-sqlite3's own db.transaction() rejects async callbacks, so we drive
+  // BEGIN/COMMIT/ROLLBACK manually. The connection is shared, so CONCURRENT
+  // tx() calls (e.g. two rate-limit checks in a Promise.all) must not
+  // interleave their BEGINs — queue them so each pair runs alone. Postgres
+  // doesn't need this: its tx() checks out a dedicated client per call.
+  let txChain: Promise<unknown> = Promise.resolve();
+  const tx = <T>(fn: (q: Query) => Promise<T>): Promise<T> => {
+    const runTx = async (): Promise<T> => {
+      const db = await getSqlite();
+      const q: Query = {
+        get: async <U>(sql: string, params: unknown[] = []) =>
+          db.prepare(sql).get(...params) as U | undefined,
+        all: async <U>(sql: string, params: unknown[] = []) =>
+          db.prepare(sql).all(...params) as U[],
+        run: async (sql: string, params: unknown[] = []) => {
+          db.prepare(sql).run(...params);
+        },
+      };
+      db.exec("BEGIN");
+      try {
+        const result = await fn(q);
+        db.exec("COMMIT");
+        return result;
+      } catch (err) {
+        db.exec("ROLLBACK");
+        throw err;
+      }
     };
-    db.exec("BEGIN");
-    try {
-      const result = await fn(q);
-      db.exec("COMMIT");
-      return result;
-    } catch (err) {
-      db.exec("ROLLBACK");
-      throw err;
-    }
+    const result = txChain.then(runTx, runTx);
+    txChain = result.catch(() => undefined);
+    return result;
   };
   return { get, all, run, tx };
 }

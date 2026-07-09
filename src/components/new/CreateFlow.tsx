@@ -20,6 +20,7 @@ import { StepShare } from "./StepShare";
 import { StepSnap } from "./StepSnap";
 import {
   buildCreatePayload,
+  downscaleImageDataUrl,
   emptyDraft,
   fileToDataUrl,
   itemsFromReceipt,
@@ -56,7 +57,9 @@ export function CreateFlow() {
         if (kind === "demo") {
           setPreviewUrl(null);
         } else if (file) {
-          const dataUrl = await fileToDataUrl(file);
+          // Downscale before upload: phone photos are 8–48MP; 2000px reads the
+          // same for OCR at a fraction of the tokens and upload time.
+          const dataUrl = await downscaleImageDataUrl(await fileToDataUrl(file));
           setPreviewUrl(dataUrl);
           receiptImageDataUrl = dataUrl;
         }
