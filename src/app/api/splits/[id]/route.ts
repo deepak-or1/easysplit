@@ -8,6 +8,7 @@ import {
   type SplitMetaPatch,
 } from "@/lib/store";
 import { parseVenmoInput } from "@/lib/venmo";
+import { parseZelleInput } from "@/lib/zelle";
 
 /**
  * GET  /api/splits/[id] — public room state.
@@ -38,6 +39,7 @@ const patchSchema = z.object({
   restaurantName: z.string().max(80).nullish(),
   date: z.string().max(40).nullish(),
   venmoUsername: z.string().nullish(),
+  zelleHandle: z.string().max(80).nullish(),
   tipType: z.enum(["percent", "amount"]).optional(),
   tipValue: z.number().min(0, "tip can't be negative").optional(),
   taxCents: z.number().int("tax must be whole cents").min(0, "tax can't be negative").optional(),
@@ -73,6 +75,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const meta: SplitMetaPatch = {};
   if (data.restaurantName !== undefined) meta.restaurantName = data.restaurantName;
   if (data.date !== undefined) meta.date = data.date;
+  if (data.zelleHandle !== undefined) {
+    meta.zelleHandle = data.zelleHandle ? (parseZelleInput(data.zelleHandle)?.handle ?? null) : null;
+  }
   if (data.venmoUsername !== undefined) {
     meta.venmoUsername = data.venmoUsername ? parseVenmoInput(data.venmoUsername) : null;
   }

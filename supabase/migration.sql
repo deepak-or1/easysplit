@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS splits (
   host_name       TEXT NOT NULL,
   venmo_username  TEXT,
   venmo_qr_path   TEXT,
+  zelle_handle    TEXT, -- enrolled email or 10-digit US phone
   tip_type        TEXT NOT NULL DEFAULT 'percent' CHECK (tip_type IN ('percent','amount')),
   tip_value       DOUBLE PRECISION NOT NULL DEFAULT 20,
   tax_cents       INTEGER NOT NULL DEFAULT 0,
@@ -112,3 +113,6 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   window_start TEXT NOT NULL,
   count        INTEGER NOT NULL DEFAULT 1
 );
+
+-- Additive migration for pre-Zelle databases:
+ALTER TABLE splits ADD COLUMN IF NOT EXISTS zelle_handle TEXT;

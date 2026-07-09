@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createSplit, type NewItemInput } from "@/lib/store";
 import { saveUpload } from "@/lib/files";
 import { parseVenmoInput } from "@/lib/venmo";
+import { parseZelleInput } from "@/lib/zelle";
 import type { CreateSplitResponse } from "@/lib/api";
 
 /**
@@ -39,6 +40,7 @@ const createSchema = z.object({
   restaurantName: z.string().max(80).nullish(),
   date: z.string().max(40).nullish(),
   venmoUsername: z.string().nullish(),
+  zelleInput: z.string().max(80).nullish(),
   venmoQrDataUrl: z.string().nullish(),
   receiptImageDataUrl: z.string().nullish(),
   tipType: z.enum(["percent", "amount"]),
@@ -90,6 +92,7 @@ export async function POST(req: Request) {
     date: data.date ?? null,
     hostName: data.hostName,
     venmoUsername: data.venmoUsername ? parseVenmoInput(data.venmoUsername) : null,
+    zelleHandle: data.zelleInput ? (parseZelleInput(data.zelleInput)?.handle ?? null) : null,
     venmoQrPath,
     tipType: data.tipType,
     tipValue: data.tipValue,

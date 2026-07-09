@@ -18,6 +18,7 @@ export interface Split {
   hostName: string;
   venmoUsername: string | null;
   venmoQrUrl: string | null; // served via /api/files/…
+  zelleHandle: string | null; // enrolled email or 10-digit US phone
   tipType: TipType;
   tipValue: number; // percent (e.g. 20) or cents when tipType === "amount"
   taxCents: number;

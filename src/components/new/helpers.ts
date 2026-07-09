@@ -31,6 +31,7 @@ export interface Draft {
   tipFlat: string; // dollars, used when tipMode === "amount"
   venmoInput: string; // raw text the host typed
   venmoUsername: string | null; // normalized handle (parseVenmoInput)
+  zelleInput: string; // raw email/phone the host typed (server normalizes)
   venmoQrDataUrl: string | null; // uploaded QR image, kept even if undecodable
   receiptImageDataUrl: string | null; // real photo only (null for demo)
 }
@@ -53,6 +54,7 @@ export function emptyDraft(): Draft {
     tipFlat: "",
     venmoInput: "",
     venmoUsername: null,
+    zelleInput: "",
     venmoQrDataUrl: null,
     receiptImageDataUrl: null,
   };
@@ -102,6 +104,7 @@ export function buildCreatePayload(draft: Draft): CreateSplitPayload {
     restaurantName: draft.restaurantName.trim() || null,
     date: draft.date || null,
     venmoUsername: venmoUsername ?? null,
+    zelleInput: draft.zelleInput.trim() || null,
     venmoQrDataUrl: draft.venmoQrDataUrl,
     receiptImageDataUrl: draft.receiptImageDataUrl,
     tipType: draft.tipMode,

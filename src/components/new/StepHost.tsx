@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Card, Chip, Input, Money, Spinner } from "@/components/ui";
 import { dollarsToCents } from "@/lib/money";
 import { parseVenmoInput } from "@/lib/venmo";
+import { formatZelleHandle, parseZelleInput } from "@/lib/zelle";
 import { GoldNote } from "./GoldNote";
 import { TotalsSummary } from "./TotalsSummary";
 import {
@@ -28,6 +29,7 @@ export function StepHost({
 }) {
   const [qrStatus, setQrStatus] = useState<QrStatus>(draft.venmoQrDataUrl ? "backup" : "idle");
   const liveHandle = parseVenmoInput(draft.venmoInput);
+  const zelleParsed = parseZelleInput(draft.zelleInput);
   const tipCents = tipPreviewCents(draft);
 
   async function handleQrFile(file: File) {
@@ -230,6 +232,40 @@ export function StepHost({
             backup.
           </GoldNote>
         )}
+      </Card>
+
+      {/* Zelle */}
+      <Card className="flex flex-col gap-3 p-4">
+        <div>
+          <p className="font-display text-base font-semibold text-ink">Zelle</p>
+          <p className="text-xs text-muted">
+            Also optional — for friends who&apos;d rather pay straight from their bank.
+          </p>
+        </div>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted">
+            Enrolled email or U.S. phone
+          </span>
+          <Input
+            value={draft.zelleInput}
+            onChange={(e) => patch({ zelleInput: e.target.value })}
+            placeholder="you@bank.com or (555) 123-4567"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            inputMode="email"
+          />
+          {draft.zelleInput.trim() &&
+            (zelleParsed ? (
+              <span className="text-xs font-medium text-success">
+                Friends will Zelle {formatZelleHandle(zelleParsed.handle)}
+              </span>
+            ) : (
+              <span className="text-xs text-muted">
+                Use the email or U.S. phone number enrolled with Zelle at your bank.
+              </span>
+            ))}
+        </label>
       </Card>
     </div>
   );

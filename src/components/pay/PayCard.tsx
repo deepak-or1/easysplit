@@ -2,6 +2,7 @@
 
 import type { Split } from "@/lib/types";
 import type { VenmoPayment } from "@/lib/venmo";
+import { buildZelleLink, formatZelleHandle } from "@/lib/zelle";
 import { Card, CopyButton } from "@/components/ui";
 
 /**
@@ -59,9 +60,43 @@ export function PayCard({ split, payment }: { split: Split; payment: VenmoPaymen
             We never touch your account.
           </p>
         </div>
-      ) : (
+      ) : !split.zelleHandle ? (
         <div className="rounded-xl bg-cream px-4 py-3 text-center text-sm text-muted">
-          The host hasn&apos;t added their Venmo yet — copy your amount and pay them your favorite way.
+          The host hasn&apos;t added a payment method yet — copy your amount and pay them your
+          favorite way.
+        </div>
+      ) : null}
+
+      {split.zelleHandle && (
+        <div className="rounded-xl border border-line bg-cream/50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted">
+            {payment.webUrl ? "Or pay with Zelle" : "Pay with Zelle"}
+          </p>
+          <p className="mt-1.5 text-sm text-ink">
+            Send to{" "}
+            <span className="font-semibold tabular">{formatZelleHandle(split.zelleHandle)}</span>{" "}
+            ({split.hostName})
+          </p>
+          <div className="mt-3 flex gap-2">
+            <a
+              href={buildZelleLink(split.zelleHandle, split.hostName)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex flex-1 items-center justify-center rounded-full bg-zelle px-5 py-2.5 text-[15px] font-semibold text-white transition-all hover:bg-zelle-deep active:scale-[0.97]"
+            >
+              Open Zelle
+            </a>
+            <CopyButton
+              text={split.zelleHandle}
+              label="Copy handle"
+              copiedLabel="Copied!"
+              className="flex-1"
+            />
+          </div>
+          <p className="mt-2 text-xs text-muted">
+            Zelle can&apos;t prefill the amount — copy ${payment.amount} above and enter it in
+            your banking app.
+          </p>
         </div>
       )}
 

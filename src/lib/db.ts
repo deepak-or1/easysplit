@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS splits (
   host_name       TEXT NOT NULL,
   venmo_username  TEXT,
   venmo_qr_path   TEXT,
+  zelle_handle    TEXT, -- enrolled email or 10-digit US phone
   tip_type        TEXT NOT NULL DEFAULT 'percent' CHECK (tip_type IN ('percent','amount')),
   tip_value       DOUBLE PRECISION NOT NULL DEFAULT 20,
   tax_cents       INTEGER NOT NULL DEFAULT 0,
@@ -172,6 +173,8 @@ function readyPool(): Promise<Pool> {
       ssl: isLocal ? undefined : { rejectUnauthorized: false },
     });
     await pool.query(PG_SCHEMA);
+    // Additive migrations for databases created before these columns existed.
+    await pool.query("ALTER TABLE splits ADD COLUMN IF NOT EXISTS zelle_handle TEXT");
     return pool;
   })();
   return g.__settlePgReady;
@@ -237,6 +240,13 @@ async function getSqlite(): Promise<BetterSqlite3.Database> {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.exec(fs.readFileSync(path.join(process.cwd(), "src", "lib", "schema.sql"), "utf8"));
+  // Additive migrations for databases created before these columns existed
+  // (SQLite has no ADD COLUMN IF NOT EXISTS — a duplicate add just throws).
+  try {
+    db.exec("ALTER TABLE splits ADD COLUMN zelle_handle TEXT");
+  } catch {
+    /* column already exists */
+  }
   g.__settleSqlite = db;
   return db;
 }

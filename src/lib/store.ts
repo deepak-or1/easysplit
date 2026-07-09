@@ -36,6 +36,7 @@ interface SplitRow {
   host_name: string;
   venmo_username: string | null;
   venmo_qr_path: string | null;
+  zelle_handle: string | null;
   tip_type: TipType;
   tip_value: number;
   tax_cents: number;
@@ -78,6 +79,7 @@ function toSplit(r: SplitRow): Split {
     hostName: r.host_name,
     venmoUsername: r.venmo_username,
     venmoQrUrl: r.venmo_qr_path ? `/api/files/${r.venmo_qr_path}` : null,
+    zelleHandle: r.zelle_handle,
     tipType: r.tip_type,
     tipValue: r.tip_value,
     taxCents: r.tax_cents,
@@ -134,6 +136,7 @@ export interface CreateSplitInput {
   hostName: string;
   venmoUsername?: string | null;
   venmoQrPath?: string | null; // stored upload filename
+  zelleHandle?: string | null; // normalized by parseZelleInput
   tipType: TipType;
   tipValue: number;
   taxCents: number;
@@ -157,8 +160,8 @@ export async function createSplit(input: CreateSplitInput): Promise<CreateSplitR
 
   await db.tx(async (q) => {
     await q.run(
-      `INSERT INTO splits (id, host_key, restaurant_name, date, host_name, venmo_username, venmo_qr_path, tip_type, tip_value, tax_cents)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO splits (id, host_key, restaurant_name, date, host_name, venmo_username, venmo_qr_path, zelle_handle, tip_type, tip_value, tax_cents)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         splitId,
         hostKey,
@@ -167,6 +170,7 @@ export async function createSplit(input: CreateSplitInput): Promise<CreateSplitR
         input.hostName,
         input.venmoUsername ?? null,
         input.venmoQrPath ?? null,
+        input.zelleHandle ?? null,
         input.tipType,
         input.tipValue,
         input.taxCents,
@@ -330,6 +334,7 @@ export interface SplitMetaPatch {
   restaurantName?: string | null;
   date?: string | null;
   venmoUsername?: string | null;
+  zelleHandle?: string | null;
   tipType?: TipType;
   tipValue?: number;
   taxCents?: number;
@@ -343,6 +348,7 @@ export async function updateSplitMeta(splitId: string, patch: SplitMetaPatch): P
     ["restaurantName", "restaurant_name"],
     ["date", "date"],
     ["venmoUsername", "venmo_username"],
+    ["zelleHandle", "zelle_handle"],
     ["tipType", "tip_type"],
     ["tipValue", "tip_value"],
     ["taxCents", "tax_cents"],

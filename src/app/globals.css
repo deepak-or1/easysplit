@@ -25,6 +25,8 @@
   --color-gold-soft: #fff4c7;
   --color-venmo: #008cff; /* Venmo brand blue, pay buttons only */
   --color-venmo-deep: #0074d4;
+  --color-zelle: #6d1ed4; /* Zelle brand purple, pay actions only */
+  --color-zelle-deep: #5a18b0;
   --color-danger: #b3261e;
   --color-danger-soft: #f9e5e3;
 

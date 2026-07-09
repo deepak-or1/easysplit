@@ -32,8 +32,10 @@ Does NOT persist anything.
 Body: `CreateSplitPayload` (see `src/lib/api.ts`) — includes optional
 `receiptImageDataUrl` / `venmoQrDataUrl` (base64 data URLs; decode and persist
 via `saveUpload()` from `src/lib/files.ts`), host name, venmo username
-(normalize with `parseVenmoInput()`), tip/tax config, and the item list
-(already corrected by the host in the UI).
+(normalize with `parseVenmoInput()`), optional `zelleInput` (email or US
+phone; normalize with `parseZelleInput()` from `src/lib/zelle.ts` and store
+the handle), tip/tax config, and the item list (already corrected by the
+host in the UI).
 Response: `CreateSplitResponse` — `{ splitId, hostKey, hostParticipantId, url }`.
 Implementation: `createSplit()` from store. Validate with zod: hostName
 required (1–40 chars), ≥1 item, each item name 1–80 chars, quantity int ≥1,

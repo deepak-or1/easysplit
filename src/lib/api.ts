@@ -31,6 +31,7 @@ export interface CreateSplitPayload {
   restaurantName?: string | null;
   date?: string | null;
   venmoUsername?: string | null;
+  zelleInput?: string | null; // raw email/phone; server normalizes
   venmoQrDataUrl?: string | null; // base64 data URL of QR image, optional
   receiptImageDataUrl?: string | null; // base64 data URL of the receipt photo
   tipType: TipType;
@@ -62,6 +63,7 @@ export interface PatchSplitPayload {
   restaurantName?: string | null;
   date?: string | null;
   venmoUsername?: string | null;
+  zelleHandle?: string | null; // raw email/phone; server normalizes
   tipType?: TipType;
   tipValue?: number;
   taxCents?: number;

@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS splits (
   host_name       TEXT NOT NULL,
   venmo_username  TEXT,
   venmo_qr_path   TEXT,
+  zelle_handle    TEXT, -- enrolled email or 10-digit US phone
   tip_type        TEXT NOT NULL DEFAULT 'percent' CHECK (tip_type IN ('percent','amount')),
   tip_value       REAL NOT NULL DEFAULT 20,
   tax_cents       INTEGER NOT NULL DEFAULT 0,
