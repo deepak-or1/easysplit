@@ -24,6 +24,7 @@ export interface Draft {
   items: DraftItem[];
   tax: string; // dollars, as typed
   ocrSubtotalCents: number | null; // printed subtotal from parse, for a sanity check
+  ocrTipCents: number | null; // printed tip/service charge from parse (already owed!)
   hostName: string;
   tipMode: TipType; // "percent" | "amount"
   tipPercent: number; // used when tipMode === "percent"
@@ -45,6 +46,7 @@ export function emptyDraft(): Draft {
     items: [],
     tax: "",
     ocrSubtotalCents: null,
+    ocrTipCents: null,
     hostName: "",
     tipMode: "percent",
     tipPercent: 20,

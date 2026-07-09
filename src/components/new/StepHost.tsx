@@ -119,6 +119,14 @@ export function StepHost({
           </div>
         )}
 
+        {draft.ocrTipCents ? (
+          <p className="rounded-xl bg-gold-soft px-3.5 py-2.5 text-xs text-[#9a6d13]">
+            The receipt already includes a{" "}
+            <Money cents={draft.ocrTipCents} className="font-semibold" /> tip / service charge —
+            we&apos;ve prefilled it so the table pays it back. Bump the amount up if you tipped
+            extra on top.
+          </p>
+        ) : null}
         <p className="text-xs text-muted">
           Tip so far: <Money cents={tipCents} className="text-ink" /> — split across the table by
           what everyone ordered.

@@ -73,6 +73,13 @@ export function CreateFlow() {
           items: itemsFromReceipt(r),
           tax: r.taxCents ? centsToDollarString(r.taxCents) : "",
           ocrSubtotalCents: r.subtotalCents ?? null,
+          ocrTipCents: r.tipCents > 0 ? r.tipCents : null,
+          // A printed tip/service charge was already charged to the host — it
+          // MUST be collected, so prefill it as a flat amount rather than
+          // leaving the default 20% "gratuity choice" to overwrite it.
+          ...(r.tipCents > 0
+            ? { tipMode: "amount" as const, tipFlat: centsToDollarString(r.tipCents) }
+            : {}),
           receiptImageDataUrl,
         }));
         setStep(1);

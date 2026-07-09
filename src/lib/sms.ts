@@ -101,8 +101,10 @@ async function handleReceiptMms(input: InboundSms): Promise<string> {
     hostName: "Host",
     restaurantName: receipt.restaurantName,
     date: new Date().toISOString().slice(0, 10), // display-only
-    tipType: "percent",
-    tipValue: 20,
+    // A printed tip/service charge was already charged — collect exactly it.
+    // Only default to 20% when the receipt carries no gratuity of its own.
+    tipType: receipt.tipCents > 0 ? "amount" : "percent",
+    tipValue: receipt.tipCents > 0 ? receipt.tipCents : 20,
     taxCents: receipt.taxCents,
     items: receipt.items.map((it) => ({
       name: it.name,
