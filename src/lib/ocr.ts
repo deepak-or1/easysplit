@@ -77,6 +77,18 @@ export async function parseReceiptImage(
 
     // Pass 2 (hard receipts only — rotated, shadowed, crumpled): strongest
     // model with reasoning enabled and the checksum failure spelled out.
+    // Escalations cost ~5x the fast pass, so they get their own global cap —
+    // garbage images that always fail the checksum can't force expensive
+    // reruns at the full OCR rate.
+    const { checkRateLimit } = await import("./store");
+    if (!(await checkRateLimit("ocr:escalate:global", 20, 60 * 60))) {
+      return {
+        source: "llm",
+        receipt: first,
+        warning:
+          "The line items don't quite add up to the receipt's printed subtotal — worth a quick once-over below.",
+      };
+    }
     const second = await ocrPass(client, buffer, mime, "strong", first);
     const secondDelta = subtotalDelta(second);
     const best = secondDelta <= firstDelta ? second : first;
