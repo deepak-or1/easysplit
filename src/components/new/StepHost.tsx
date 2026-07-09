@@ -2,9 +2,17 @@
 
 import { useState } from "react";
 import { Card, Chip, Input, Money, Spinner } from "@/components/ui";
+import { dollarsToCents } from "@/lib/money";
 import { parseVenmoInput } from "@/lib/venmo";
 import { GoldNote } from "./GoldNote";
-import { decodeQrFromDataUrl, fileToDataUrl, tipPreviewCents, type Draft } from "./helpers";
+import { TotalsSummary } from "./TotalsSummary";
+import {
+  computeSubtotalCents,
+  decodeQrFromDataUrl,
+  fileToDataUrl,
+  tipPreviewCents,
+  type Draft,
+} from "./helpers";
 
 const TIP_PRESETS = [15, 18, 20, 25];
 
@@ -131,6 +139,13 @@ export function StepHost({
           Tip so far: <Money cents={tipCents} className="text-ink" /> — split across the table by
           what everyone ordered.
         </p>
+
+        <hr className="receipt-rule" />
+        <TotalsSummary
+          itemsCents={computeSubtotalCents(draft.items)}
+          taxCents={dollarsToCents(draft.tax)}
+          tipCents={tipCents}
+        />
       </div>
 
       {/* Venmo */}

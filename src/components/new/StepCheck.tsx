@@ -1,8 +1,9 @@
 "use client";
 
 import { Button, Card, Input, Money } from "@/components/ui";
-import { formatCents } from "@/lib/money";
+import { dollarsToCents, formatCents } from "@/lib/money";
 import { GoldNote } from "./GoldNote";
+import { TotalsSummary } from "./TotalsSummary";
 import {
   computeSubtotalCents,
   itemLineCents,
@@ -143,10 +144,12 @@ export function StepCheck({
           </div>
         </label>
         <hr className="receipt-rule" />
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-muted">Items subtotal</span>
-          <Money cents={subtotalCents} className="font-display text-base font-semibold text-ink" />
-        </div>
+        <TotalsSummary
+          itemsCents={subtotalCents}
+          taxCents={dollarsToCents(draft.tax)}
+          tipCents={draft.ocrTipCents}
+          tipLabel="Tip / service (on receipt)"
+        />
         {mismatch && (
           <p className="text-xs leading-snug text-[#9a6d13]">
             Heads up — the receipt&apos;s printed subtotal ({formatCents(ocr)}) doesn&apos;t match
