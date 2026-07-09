@@ -67,7 +67,9 @@ export function Input({
   return (
     <input
       className={clsx(
-        "w-full rounded-xl border border-line bg-card px-4 py-3 text-[15px] text-ink",
+        // text-base (16px) minimum: iOS Safari auto-zooms the page when focusing any
+        // input under 16px, and the zoom sticks after blur — the "sideways scroll" bug.
+        "w-full rounded-xl border border-line bg-card px-4 py-3 text-base text-ink",
         "placeholder:text-muted/70 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20",
         className,
       )}

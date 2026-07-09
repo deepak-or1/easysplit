@@ -116,6 +116,18 @@ body {
   );
 }
 
+/* iOS Safari gives date/time inputs an intrinsic width and refuses to shrink
+   them inside flex columns — they punch out of their card. Strip the native
+   appearance and let them size like normal inputs. */
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 0;
+}
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+}
+
 /* Dashed separators inside receipts. */
 .receipt-rule {
   border: none;

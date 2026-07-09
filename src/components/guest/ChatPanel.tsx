@@ -94,7 +94,7 @@ export function ChatPanel({
           placeholder="I had the burger and half the fries…"
           enterKeyHint="send"
           aria-label="Chat message"
-          className="min-w-0 flex-1 rounded-full border border-line bg-paper px-4 py-2.5 text-[15px] text-ink outline-none placeholder:text-muted/70 focus:border-primary focus:ring-2 focus:ring-primary/20"
+          className="min-w-0 flex-1 rounded-full border border-line bg-paper px-4 py-2.5 text-base text-ink outline-none placeholder:text-muted/70 focus:border-primary focus:ring-2 focus:ring-primary/20"
         />
         <button
           type="submit"
