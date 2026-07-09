@@ -119,7 +119,13 @@ function normalizeParsed(raw: ParsedReceipt): ParsedReceipt {
       if (unitPriceCents === 0 && totalCents > 0) unitPriceCents = Math.round(totalCents / quantity);
       return { name: i.name.trim().slice(0, 80), quantity, unitPriceCents, totalCents };
     });
-  const subtotalCents = items.reduce((s, i) => s + i.totalCents, 0);
+  const itemsSum = items.reduce((s, i) => s + i.totalCents, 0);
+  // Keep the PRINTED subtotal when the model read one — the correction UI
+  // compares it against Σ items and warns the host on a mismatch, which is
+  // exactly how imperfect line extraction gets caught. Recompute only when
+  // no subtotal was printed/read.
+  const printedSubtotal = Math.max(0, Math.round(Number(raw.subtotalCents) || 0));
+  const subtotalCents = printedSubtotal > 0 ? printedSubtotal : itemsSum;
   const taxCents = Math.max(0, Math.round(Number(raw.taxCents) || 0));
   const tipCents = Math.max(0, Math.round(Number(raw.tipCents) || 0));
   return {
@@ -129,6 +135,6 @@ function normalizeParsed(raw: ParsedReceipt): ParsedReceipt {
     subtotalCents,
     taxCents,
     tipCents,
-    totalCents: subtotalCents + taxCents + tipCents,
+    totalCents: itemsSum + taxCents + tipCents,
   };
 }
