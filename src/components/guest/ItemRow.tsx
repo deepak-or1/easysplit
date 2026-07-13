@@ -6,6 +6,7 @@ import type { ClaimAction, ItemWithClaims, Participant, Frac } from "@/lib/types
 import type { ClaimResponse } from "@/lib/api";
 import { F_ONE, F_ZERO, fadd, fcmp, formatFrac, fr } from "@/lib/fraction";
 import { Avatar, Badge, Chip, Money, Spinner } from "@/components/ui";
+import { SplitPicker } from "./SplitPicker";
 
 function nameFor(participants: Participant[], id: string): string {
   return participants.find((p) => p.id === id)?.name ?? "?";
@@ -28,6 +29,7 @@ export function ItemRow({
   onClaim: (actions: ClaimAction[]) => Promise<ClaimResponse | null>;
 }) {
   const [busy, setBusy] = useState(false);
+  const [splitOpen, setSplitOpen] = useState(false);
 
   const myClaim = item.claims.find((c) => c.participantId === participantId);
   const mine = myClaim?.share;
@@ -123,6 +125,16 @@ export function ItemRow({
             )}
           </>
         )}
+        {!item.sharedByAll && !mine && (
+          <Chip
+            active={splitOpen}
+            disabled={busy}
+            className="ml-auto px-3 py-1 text-xs"
+            onClick={() => setSplitOpen((v) => !v)}
+          >
+            Split…
+          </Chip>
+        )}
       </div>
 
       {/* Controls for a row I've claimed */}
@@ -146,19 +158,8 @@ export function ItemRow({
               </Chip>
             );
           })}
-          <Chip
-            disabled={busy || participants.length < 2}
-            onClick={() =>
-              void act([
-                {
-                  type: "split",
-                  itemId: item.id,
-                  participantIds: participants.map((p) => p.id),
-                },
-              ])
-            }
-          >
-            Split evenly
+          <Chip active={splitOpen} disabled={busy} onClick={() => setSplitOpen((v) => !v)}>
+            Split…
           </Chip>
           <Chip
             disabled={busy}
@@ -168,6 +169,21 @@ export function ItemRow({
             ✕ Remove
           </Chip>
         </div>
+      )}
+
+      {splitOpen && !item.sharedByAll && (
+        <SplitPicker
+          item={item}
+          participants={participants}
+          participantId={participantId}
+          busy={busy}
+          onConfirm={(ids) =>
+            void act([{ type: "split", itemId: item.id, participantIds: ids }]).then(() =>
+              setSplitOpen(false),
+            )
+          }
+          onCancel={() => setSplitOpen(false)}
+        />
       )}
     </div>
   );
