@@ -37,11 +37,12 @@ npm run seed     # creates a fully-claimed demo split, prints room + host links
 npm run dev      # http://localhost:3000
 ```
 
-## The interesting engineering
+## Under the hood
 
 - **Money that always reconciles.** All money is integer cents; fractional
   ownership ("half the fries", "2 of 3 margaritas") is an exact rational
-  `{n, d}` — never a float. Every division uses largest-remainder allocation, so
+  `{n, d}` — never a float. Every division that determines what anyone owes uses
+  largest-remainder allocation, so
   `Σ everyone's totals + unclaimed === receipt grand total` holds *by
   construction*, to the cent, every time. A 200-scenario property test (random
   items, claims, thirds, shared plates, tax, tip) asserts the invariant never
@@ -50,11 +51,11 @@ npm run dev      # http://localhost:3000
   the fries" → structured claim actions, with fuzzy item matching
   ("marg" → Margarita), quantity words, split-with-names, on-behalf claims
   ("I'll cover Sam's beer"), and clarifying questions instead of failures. Pure
-  function, no LLM, fully unit-tested — and swappable for one later.
-- **Self-checking OCR.** Receipt photos are parsed by Claude vision — and every
-  receipt carries its own answer key: the printed subtotal. If extracted line
-  items don't sum to it, the pipeline escalates once to a stronger
-  reasoning-enabled pass with the mismatch spelled out. A rotated, hand-shadowed
+  function, no LLM, 30 dedicated unit tests — and swappable for one later.
+- **Self-checking OCR.** Receipt photos are parsed by Claude vision — and most
+  receipts carry their own answer key: the printed subtotal. If extracted line
+  items don't sum to it, the pipeline escalates once (behind its own rate cap)
+  to a stronger reasoning-enabled pass with the mismatch spelled out. A rotated, hand-shadowed
   bar receipt with 25 line items and a 22% service charge reconciled to the
   exact cent in testing. Whatever still disagrees is surfaced to the host in a
   correction UI — OCR is never trusted blindly.
@@ -62,7 +63,7 @@ npm run dev      # http://localhost:3000
   production runs Supabase Postgres. SQL is written once with `?` placeholders
   behind a tiny async adapter that rewrites them per driver, keeps schema parity
   (bootstrapped idempotently, additive migrations included), and lazy-loads the
-  native SQLite module so it never ships to serverless.
+  native SQLite module so it never loads on serverless.
 - **SMS-first architecture.** A Twilio-compatible `/api/sms/inbound` webhook
   already handles the whole loop — text a receipt photo, get a room link back;
   text "I had the tacos", get your running total and pay link — locally
@@ -70,8 +71,12 @@ npm run dev      # http://localhost:3000
 - **Abuse-hardened by design.** The OCR endpoint (the one that spends money) is
   rate-limited per IP, per phone number, *and* globally, with a separate cap on
   expensive escalation passes — all DB-backed so limits hold across serverless
-  instances. Images are downscaled client-side before upload; structured output
-  means the endpoint can't be repurposed as a free vision API.
+  instances. Images are downscaled client-side before upload; the endpoint takes
+  no user prompt and returns only receipt-schema JSON, so repurposing it as a
+  free vision API is impractical. The trust model is explicit: the room link is
+  the boundary — anyone holding it can claim items (that's the product, same as
+  passing the paper receipt around the table), while receipt edits and payment
+  confirmations require a bearer host key.
 - **Payments stay safe and boring.** Venmo links are best-effort deep links with
   first-class copy-amount/copy-note fallbacks; Zelle (which has no public
   pay-link standard) gets handle + copy buttons and a best-effort bank-app
@@ -120,7 +125,7 @@ Everything is optional — unset means local mocks (see [`.env.example`](.env.ex
 ```
 UI (Next.js App Router, Tailwind v4)
   └─ src/lib/api.ts        typed client — UIs never call raw fetch
-       └─ /api routes      zod-validated, host-key auth on mutations
+       └─ /api routes      zod-validated, host-key auth on host mutations
             └─ src/lib/store.ts   the ONLY module that touches the DB
                  └─ src/lib/db.ts   async adapter: SQLite ⇄ Postgres
 ```

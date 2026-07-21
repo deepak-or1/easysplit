@@ -1,4 +1,4 @@
--- Settle — Postgres / Supabase schema (production path).
+-- EasySplit — Postgres / Supabase schema (production path).
 --
 -- PARITY, NOT IDIOMATIC TRANSLATION. This schema is a deliberate byte-for-byte
 -- mirror of src/lib/schema.sql (the SQLite dev schema), NOT a Postgres-idiomatic

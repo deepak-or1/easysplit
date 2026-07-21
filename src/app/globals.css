@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /*
- * Settle design tokens — warm "dinner table" palette, deliberately single-theme.
+ * EasySplit design tokens — warm "dinner table" palette, deliberately single-theme.
  * Usage: bg-paper, text-ink, text-muted, border-line, bg-primary, text-primary,
  * bg-card, bg-success, text-success, bg-gold, bg-venmo, font-display, font-sans.
  * See docs/DESIGN.md for the full direction.

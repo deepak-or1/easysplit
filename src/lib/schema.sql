@@ -1,4 +1,4 @@
--- Settle — SQLite schema (local dev). A Postgres/Supabase translation lives
+-- EasySplit — SQLite schema (local dev). A Postgres/Supabase translation lives
 -- in supabase/migration.sql; keep the two in sync.
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
