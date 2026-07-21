@@ -148,6 +148,19 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   window_start TEXT NOT NULL,
   count        INTEGER NOT NULL DEFAULT 1
 );
+
+-- The app reaches Postgres only through this server-side pool, connecting as
+-- the table owner — which RLS never restricts. Enabling RLS with no policies
+-- closes the one other door: Supabase's auto-generated public REST API.
+ALTER TABLE splits         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE receipts       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE receipt_items  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE participants   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE claims         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payments       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE phone_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rate_limits    ENABLE ROW LEVEL SECURITY;
 `;
 
 interface PgGlobals {
