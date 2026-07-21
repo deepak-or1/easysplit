@@ -393,7 +393,6 @@ function ReceiptEditor({ room, splitId, hostKey, applyState, onDone }: Props & {
         )}
       </div>
 
-      {/* Tax editor */}
       <div className="space-y-2 border-t border-line pt-4">
         <span className="text-sm font-medium text-ink">Tax</span>
         <div className="relative w-32">

@@ -39,7 +39,7 @@ describe("buildZelleLink", () => {
   });
 
   it("uses emails as-is", () => {
-    const url = buildZelleLink("a@b.com", "Priya");
+    const url = buildZelleLink("a@b.com", "Deepak");
     const data = decodeURIComponent(url.split("data=")[1]);
     const payload = JSON.parse(Buffer.from(data, "base64").toString("utf8"));
     expect(payload.token).toBe("a@b.com");

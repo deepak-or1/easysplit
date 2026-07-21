@@ -38,10 +38,6 @@ export const MIME_BY_EXT: Record<string, string> = {
   heic: "image/heic",
 };
 
-export function isSupportedImage(mime: string): boolean {
-  return mime in EXT_BY_MIME;
-}
-
 function supabaseStorageEnabled(): boolean {
   return !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
 }

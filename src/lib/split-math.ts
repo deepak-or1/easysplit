@@ -51,12 +51,6 @@ export function claimedShare(item: ReceiptItem, claims: Claim[], participants: P
   return fsum(effectiveClaims(item, claims, participants).map((c) => c.share));
 }
 
-/** quantity − claimed, clamped at zero. */
-export function remainingShare(item: ReceiptItem, claims: Claim[], participants: Participant[]): Frac {
-  const rem = fsub(fr(item.quantity), claimedShare(item, claims, participants));
-  return rem.n < 0 ? F_ZERO : rem;
-}
-
 /**
  * Compute the full settlement. Guarantees, by construction:
  *   Σ people.totalCents + unclaimed.totalCents === subtotal + tax + tip

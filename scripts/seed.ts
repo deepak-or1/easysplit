@@ -33,13 +33,13 @@ function fail(message: string): never {
 }
 
 async function main(): Promise<void> {
-  /* 1. Host "Priya" creates the split from the demo receipt. Queso Fundido is
+  /* 1. Host "Deepak" creates the split from the demo receipt. Queso Fundido is
      flagged shared-by-all here (it is not flagged in DEMO_RECEIPT). ---------- */
   const { splitId, hostKey, hostParticipantId } = await createSplit({
     restaurantName: DEMO_RECEIPT.restaurantName,
     date: TODAY,
-    hostName: "Priya",
-    venmoUsername: "priya-sharma",
+    hostName: "Deepak",
+    venmoUsername: "deepak-dalai",
     tipType: "percent",
     tipValue: 20,
     taxCents: 995,
@@ -53,7 +53,7 @@ async function main(): Promise<void> {
   });
 
   /* 2. Friends join (idempotent by name). --------------------------------- */
-  const priya = hostParticipantId;
+  const deepak = hostParticipantId;
   const alex = (await joinParticipant(splitId, "Alex")).id;
   const maya = (await joinParticipant(splitId, "Maya")).id;
   const sam = (await joinParticipant(splitId, "Sam")).id;
@@ -69,7 +69,7 @@ async function main(): Promise<void> {
   /* 4. Everyone claims what they had. -------------------------------------- */
   const actions: ClaimAction[] = [
     // Shared starter split evenly among the whole table.
-    { type: "split", itemId: itemId("Nachos Grande"), participantIds: [priya, alex, maya, sam] },
+    { type: "split", itemId: itemId("Nachos Grande"), participantIds: [deepak, alex, maya, sam] },
     // Alex: the burger + half the truffle fries.
     { type: "set", itemId: itemId("Smash Burger"), participantId: alex, share: fr(1, 1) },
     { type: "set", itemId: itemId("Truffle Fries"), participantId: alex, share: fr(1, 2) },
@@ -79,9 +79,9 @@ async function main(): Promise<void> {
     // Sam: both IPAs + the coke.
     { type: "set", itemId: itemId("Hazy IPA"), participantId: sam, share: fr(2, 1) },
     { type: "set", itemId: itemId("Mexican Coke"), participantId: sam, share: fr(1, 1) },
-    // Priya: the last margarita + the other half of the fries.
-    { type: "set", itemId: itemId("Margarita"), participantId: priya, share: fr(1, 1) },
-    { type: "set", itemId: itemId("Truffle Fries"), participantId: priya, share: fr(1, 2) },
+    // Deepak: the last margarita + the other half of the fries.
+    { type: "set", itemId: itemId("Margarita"), participantId: deepak, share: fr(1, 1) },
+    { type: "set", itemId: itemId("Truffle Fries"), participantId: deepak, share: fr(1, 2) },
   ];
 
   const result = await applyActions(splitId, actions);
@@ -108,8 +108,8 @@ async function main(): Promise<void> {
   await logMessage({
     splitId,
     participantId: alex,
-    body: "burger and I'll split the fries with Priya",
-    reply: "Done — Smash Burger and ½ Truffle Fries. Priya's got the other half.",
+    body: "burger and I'll split the fries with Deepak",
+    reply: "Done — Smash Burger and ½ Truffle Fries. Deepak's got the other half.",
   });
 
   /* 6. Compute totals, mark Sam as self-reported paid. --------------------- */

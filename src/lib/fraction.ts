@@ -51,10 +51,6 @@ export function fIsNeg(a: Frac): boolean {
   return a.n < 0;
 }
 
-export function fMax(a: Frac, b: Frac): Frac {
-  return fcmp(a, b) >= 0 ? a : b;
-}
-
 export function toNumber(a: Frac): number {
   return a.n / a.d;
 }

@@ -72,7 +72,6 @@ export function StepHost({
         />
       </label>
 
-      {/* Tip */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold uppercase tracking-wide text-muted">Tip</span>

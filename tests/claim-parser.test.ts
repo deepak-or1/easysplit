@@ -21,15 +21,15 @@ const items: ReceiptItem[] = DEMO_RECEIPT.items.map((it, i) => ({
 function person(id: string, name: string, isHost = false): Participant {
   return { id, name, isHost, paidStatus: "unpaid", joinedAt: "2026-01-01T00:00:00.000Z" };
 }
-const priya = person("p_priya", "Priya", true); // self
+const deepak = person("p_deepak", "Deepak", true); // self
 const alex = person("p_alex", "Alex");
 const maya = person("p_maya", "Maya");
 const sam = person("p_sam", "Sam");
-const participants = [priya, alex, maya, sam];
+const participants = [deepak, alex, maya, sam];
 
 function parse(message: string, opts?: { items?: ReceiptItem[] }) {
   const ctx: ParseContext = {
-    self: priya,
+    self: deepak,
     items: opts?.items ?? items,
     participants,
     selfClaims: [],
@@ -37,7 +37,7 @@ function parse(message: string, opts?: { items?: ReceiptItem[] }) {
   return parseClaimMessage(message, ctx);
 }
 
-const setAction = (itemId: string, n: number, d: number, pid = priya.id): ClaimAction => ({
+const setAction = (itemId: string, n: number, d: number, pid = deepak.id): ClaimAction => ({
   type: "set",
   itemId,
   participantId: pid,
@@ -87,14 +87,14 @@ describe("claim parser — CONTRACTS table rows", () => {
     const r = parse("split the nachos with Alex and Maya");
     expect(r.clarification).toBeUndefined();
     expect(r.actions).toEqual([
-      { type: "split", itemId: "i2", participantIds: ["p_priya", "p_alex", "p_maya"] },
+      { type: "split", itemId: "i2", participantIds: ["p_deepak", "p_alex", "p_maya"] },
     ]);
   });
 
   it('"share fries with Sam" -> split [self, Sam]', () => {
     const r = parse("share fries with Sam");
     expect(r.actions).toEqual([
-      { type: "split", itemId: "i4", participantIds: ["p_priya", "p_sam"] },
+      { type: "split", itemId: "i4", participantIds: ["p_deepak", "p_sam"] },
     ]);
   });
 
@@ -110,17 +110,17 @@ describe("claim parser — CONTRACTS table rows", () => {
 
   it('"remove the burger" -> unclaim', () => {
     const r = parse("remove the burger");
-    expect(r.actions).toEqual([{ type: "unclaim", itemId: "i3", participantId: "p_priya" }]);
+    expect(r.actions).toEqual([{ type: "unclaim", itemId: "i3", participantId: "p_deepak" }]);
   });
 
   it('"I didn\'t have the fries" -> unclaim', () => {
     const r = parse("I didn't have the fries");
-    expect(r.actions).toEqual([{ type: "unclaim", itemId: "i4", participantId: "p_priya" }]);
+    expect(r.actions).toEqual([{ type: "unclaim", itemId: "i4", participantId: "p_deepak" }]);
   });
 
   it('"undo the tacos" -> unclaim', () => {
     const r = parse("undo the tacos");
-    expect(r.actions).toEqual([{ type: "unclaim", itemId: "i5", participantId: "p_priya" }]);
+    expect(r.actions).toEqual([{ type: "unclaim", itemId: "i5", participantId: "p_deepak" }]);
   });
 });
 

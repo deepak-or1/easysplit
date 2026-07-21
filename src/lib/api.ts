@@ -168,6 +168,3 @@ export function getStoredHostKey(splitId: string): string | null {
 export function storeHostKey(splitId: string, hostKey: string): void {
   localStorage.setItem(`settle:${splitId}:hostKey`, hostKey);
 }
-
-/* ---------------- Frac helper for client-side share math ---------------- */
-export type { Frac };
