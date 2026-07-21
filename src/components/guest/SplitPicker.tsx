@@ -3,14 +3,15 @@
 import { useState } from "react";
 import clsx from "clsx";
 import type { ItemWithClaims, Participant } from "@/lib/types";
-import { F_ZERO, formatFrac, fr, fsub, fsum } from "@/lib/fraction";
+import { F_ZERO, formatFrac, fr } from "@/lib/fraction";
 import { Avatar, Button, Money } from "@/components/ui";
 
 /**
  * Inline people-picker for splitting one item among a chosen group.
- * Mirrors the server's `split` action exactly: people you DON'T select keep
- * their claims, and the selected group divides whatever is left — so the
- * preview always matches what will actually happen.
+ * The picked set is authoritative: confirming splits the whole item evenly
+ * among the selected people and removes anyone left unpicked (sent as
+ * `unclaim` actions ahead of the `split`) — so the preview always matches
+ * what will actually happen, and un-splitting someone is just unpicking them.
  */
 export function SplitPicker({
   item,
@@ -43,14 +44,11 @@ export function SplitPicker({
     });
 
   const n = selected.size;
-  const othersShare = fsum(
-    item.claims.filter((c) => !selected.has(c.participantId)).map((c) => c.share),
-  );
-  let left = fsub(fr(item.quantity), othersShare);
-  if (left.n < 0) left = F_ZERO;
-  const nothingLeft = left.n <= 0;
-  const each = n > 0 && !nothingLeft ? fr(left.n, left.d * n) : F_ZERO;
-  const eachCents = Math.round((item.totalCents * each.n) / (each.d * item.quantity));
+  const each = n > 0 ? fr(item.quantity, n) : F_ZERO;
+  const eachCents = n > 0 ? Math.round(item.totalCents / n) : 0;
+  const removedNames = item.claims
+    .filter((c) => !selected.has(c.participantId))
+    .map((c) => participants.find((p) => p.id === c.participantId)?.name ?? "?");
 
   return (
     <div className="mt-2.5 rounded-xl border border-line bg-cream/50 p-3 animate-[var(--animate-rise)]">
@@ -107,16 +105,18 @@ export function SplitPicker({
           It&apos;s just you here so far — share the room link and friends will show up in this
           list.
         </p>
-      ) : nothingLeft && n > 0 ? (
-        <p className="mt-2.5 text-xs text-muted">
-          Nothing left to split — the unpicked people have claimed it all. Add them to the split to
-          re-divide it.
-        </p>
       ) : n > 0 ? (
-        <p className="mt-2.5 text-xs text-muted">
-          {formatFrac(each)} each · ≈ <Money cents={eachCents} className="text-ink" /> apiece before
-          tax &amp; tip
-        </p>
+        <>
+          <p className="mt-2.5 text-xs text-muted">
+            {formatFrac(each)} each · ≈ <Money cents={eachCents} className="text-ink" />{" "}
+            apiece before tax &amp; tip
+          </p>
+          {removedNames.length > 0 && (
+            <p className="mt-1 text-xs text-muted">
+              Unpicked, so they come off this item: {removedNames.join(", ")}.
+            </p>
+          )}
+        </>
       ) : (
         <p className="mt-2.5 text-xs text-muted">Pick at least one person.</p>
       )}
@@ -125,7 +125,7 @@ export function SplitPicker({
         <Button
           size="sm"
           className="flex-1"
-          disabled={busy || n === 0 || nothingLeft}
+          disabled={busy || n === 0}
           onClick={() => onConfirm([...selected])}
         >
           {n > 1 ? `Split ${n} ways` : "Claim it"}

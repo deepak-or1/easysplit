@@ -177,11 +177,22 @@ export function ItemRow({
           participants={participants}
           participantId={participantId}
           busy={busy}
-          onConfirm={(ids) =>
-            void act([{ type: "split", itemId: item.id, participantIds: ids }]).then(() =>
-              setSplitOpen(false),
-            )
-          }
+          onConfirm={(ids) => {
+            const keep = new Set(ids);
+            // Unpicked claimants come off the item first, then the picked
+            // group splits the whole thing — mirrors the SplitPicker preview.
+            const actions: ClaimAction[] = [
+              ...item.claims
+                .filter((c) => !keep.has(c.participantId))
+                .map((c) => ({
+                  type: "unclaim" as const,
+                  itemId: item.id,
+                  participantId: c.participantId,
+                })),
+              { type: "split" as const, itemId: item.id, participantIds: ids },
+            ];
+            void act(actions).then(() => setSplitOpen(false));
+          }}
           onCancel={() => setSplitOpen(false)}
         />
       )}
