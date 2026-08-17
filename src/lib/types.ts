@@ -7,9 +7,13 @@
 export type Frac = { n: number; d: number };
 
 export type TipType = "percent" | "amount";
+/** Shape of a whole-bill discount. null on the split means there is none. */
+export type DiscountType = "percent" | "amount";
 export type PaidStatus = "unpaid" | "reported" | "confirmed";
 export type SplitStatus = "open" | "settled";
 export type MessageChannel = "web" | "sms";
+/** What kind of bill this is. Grocery rooms allow single-person item takeovers. */
+export type SplitType = "restaurant" | "grocery";
 
 export interface Split {
   id: string;
@@ -21,8 +25,12 @@ export interface Split {
   zelleHandle: string | null; // enrolled email or 10-digit US phone
   tipType: TipType;
   tipValue: number; // percent (e.g. 20) or cents when tipType === "amount"
+  /** null = no whole-bill discount. Tip is always computed PRE-discount. */
+  discountType: DiscountType | null;
+  discountValue: number; // percent (e.g. 15) or cents when discountType === "amount"
   taxCents: number;
   status: SplitStatus;
+  splitType: SplitType;
   createdAt: string;
 }
 
@@ -50,6 +58,8 @@ export interface Participant {
   id: string;
   name: string;
   isHost: boolean;
+  /** Birthday people pay $0; their share is redistributed across everyone else. */
+  isBirthday: boolean;
   paidStatus: PaidStatus;
   joinedAt: string;
 }
@@ -85,6 +95,18 @@ export interface PersonSettlement {
   itemsCents: number;
   taxCents: number;
   tipCents: number;
+  /** Their slice of the whole-bill discount, allocated like tax and tip. Subtracted. */
+  discountCents: number;
+  isBirthday: boolean;
+  /**
+   * Birthday redistribution, in cents. Negative for a birthday person (exactly
+   * −(items + tax + tip − discount), zeroing their total); positive for
+   * everyone else, their even slice of what the birthday people owed. Sums to 0
+   * across the room, so the grand-total invariant is untouched. 0 when nobody
+   * is flagged.
+   */
+  birthdayAdjustmentCents: number;
+  /** itemsCents + taxCents + tipCents − discountCents + birthdayAdjustmentCents. */
   totalCents: number;
 }
 
@@ -93,6 +115,7 @@ export interface UnclaimedSettlement {
   itemsCents: number;
   taxCents: number;
   tipCents: number;
+  discountCents: number;
   totalCents: number;
 }
 
@@ -102,6 +125,9 @@ export interface Settlement {
   subtotalCents: number;
   taxCents: number;
   tipCents: number;
+  /** The whole-bill discount, clamped to [0, subtotalCents]. 0 when there is none. */
+  discountCents: number;
+  /** subtotal + tax + tip − discount. */
   grandTotalCents: number;
   /** Σ people.totalCents + unclaimed.totalCents === grandTotalCents. Always true by construction. */
   reconciles: boolean;
@@ -131,7 +157,10 @@ export interface RoomState {
 export type ClaimAction =
   | { type: "set"; itemId: string; participantId: string; share: Frac }
   | { type: "unclaim"; itemId: string; participantId: string }
-  | { type: "split"; itemId: string; participantIds: string[] }; // even split of whole item
+  | { type: "split"; itemId: string; participantIds: string[] } // even split of whole item
+  // Grocery rooms only: stop sharing an item and claim all of it. Clears the
+  // item's sharedByAll flag and every other claim on it.
+  | { type: "takeover"; itemId: string; participantId: string };
 
 export interface Clarification {
   question: string;
@@ -161,6 +190,13 @@ export interface ParsedReceipt {
   subtotalCents: number;
   taxCents: number;
   tipCents: number;
+  /**
+   * A discount applied to the WHOLE bill (e.g. "15% off entire check"), in
+   * cents, plus any per-line discount the fold couldn't match to an item.
+   * Optional because the hand-written demo receipts predate it and carry none;
+   * every receipt that comes out of `normalizeParsed` sets it (see PassResult).
+   */
+  discountCents?: number;
   totalCents: number;
 }
 

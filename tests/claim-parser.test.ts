@@ -19,7 +19,14 @@ const items: ReceiptItem[] = DEMO_RECEIPT.items.map((it, i) => ({
 // i5 Tacos al Pastor, i6 Margarita, i7 Hazy IPA, i8 Mexican Coke
 
 function person(id: string, name: string, isHost = false): Participant {
-  return { id, name, isHost, paidStatus: "unpaid", joinedAt: "2026-01-01T00:00:00.000Z" };
+  return {
+    id,
+    name,
+    isHost,
+    isBirthday: false,
+    paidStatus: "unpaid",
+    joinedAt: "2026-01-01T00:00:00.000Z",
+  };
 }
 const deepak = person("p_deepak", "Deepak", true); // self
 const alex = person("p_alex", "Alex");

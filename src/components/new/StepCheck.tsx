@@ -5,9 +5,12 @@ import { dollarsToCents, formatCents } from "@/lib/money";
 import { GoldNote } from "./GoldNote";
 import { TotalsSummary } from "./TotalsSummary";
 import {
+  applyItemEdit,
   computeSubtotalCents,
+  discountPreviewCents,
   itemLineCents,
   newItem,
+  sharedByDefault,
   type Draft,
   type DraftItem,
 } from "./helpers";
@@ -27,10 +30,13 @@ export function StepCheck({
   onDismissWarning: () => void;
 }) {
   const updateItem = (key: string, next: Partial<DraftItem>) =>
-    patch({ items: draft.items.map((it) => (it.key === key ? { ...it, ...next } : it)) });
+    patch({ items: draft.items.map((it) => (it.key === key ? applyItemEdit(it, next) : it)) });
   const deleteItem = (key: string) =>
     patch({ items: draft.items.filter((it) => it.key !== key) });
-  const addItem = () => patch({ items: [...draft.items, newItem()] });
+  // Hand-added items follow the same default as parsed ones: shared on a
+  // grocery run, claimed individually at a restaurant.
+  const grocery = draft.splitType === "grocery";
+  const addItem = () => patch({ items: [...draft.items, newItem(sharedByDefault(draft.splitType))] });
 
   const subtotalCents = computeSubtotalCents(draft.items);
   const ocr = draft.ocrSubtotalCents;
@@ -40,7 +46,11 @@ export function StepCheck({
     <div className="flex flex-col gap-5 animate-[var(--animate-rise)]">
       <header className="text-center">
         <h1 className="font-display text-2xl font-semibold text-ink">Give it a once-over</h1>
-        <p className="mt-1 text-sm text-muted">OCR isn&apos;t perfect — check the names and prices.</p>
+        <p className="mt-1 text-sm text-muted">
+          {grocery
+            ? "Everything starts shared — untick anything that's just one person's."
+            : "OCR isn't perfect — check the names and prices."}
+        </p>
       </header>
 
       {warning && <GoldNote onDismiss={onDismissWarning}>{warning}</GoldNote>}
@@ -52,7 +62,7 @@ export function StepCheck({
           <Input
             value={draft.restaurantName}
             onChange={(e) => patch({ restaurantName: e.target.value })}
-            placeholder="Restaurant name"
+            placeholder={grocery ? "Store name" : "Restaurant name"}
           />
         </label>
         <label className="flex flex-col gap-1">
@@ -144,11 +154,17 @@ export function StepCheck({
           </div>
         </label>
         <hr className="receipt-rule" />
+        {/* The live discount, not the OCR one: clamped to these items (a coupon
+            bigger than the bill can't render a negative total) and it follows
+            the host's edits, including removing the discount outright. */}
         <TotalsSummary
           itemsCents={subtotalCents}
           taxCents={dollarsToCents(draft.tax)}
-          tipCents={draft.ocrTipCents}
+          tipCents={grocery ? null : draft.ocrTipCents}
+          discountCents={discountPreviewCents(draft)}
           tipLabel="Tip / service (on receipt)"
+          totalLabel={grocery ? "Cart total" : undefined}
+          totalEmoji={grocery ? "🛒" : undefined}
         />
         {mismatch && (
           <p className="text-xs leading-snug text-[#6f5a00]">

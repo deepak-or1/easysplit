@@ -21,11 +21,19 @@ rational `Frac {n, d}` (see `src/lib/fraction.ts`) — never floats.**
 ## Routes
 
 ### `POST /api/receipts/parse`
-Body: `{ imageDataUrl: string }` (data URL) **or** `{ demo: true }`.
+Body: `{ imageDataUrl: string }` (data URL) **or** `{ demo: true, kind? }` where
+`kind` is `"restaurant" | "grocery"` (default and any unknown value → restaurant).
 Response: `ReceiptParseResponse` — `{ source: "llm" | "mock", receipt: ParsedReceipt, warning? }`.
 Implementation: decode data URL → `parseReceiptImage(buffer, mime)` from
 `src/lib/ocr.ts` (handles the no-key mock path itself). `{demo: true}` returns
-`DEMO_RECEIPT` from `src/lib/demo-receipt.ts` with `source: "mock"`, no warning.
+`DEMO_RECEIPT` (or `DEMO_GROCERY_RECEIPT` when `kind: "grocery"`) from
+`src/lib/demo-receipt.ts` with `source: "mock"`, no warning.
+Per-line discount money that couldn't be matched to an item joins
+`receipt.discountCents` only when the printed subtotal confirms it is still
+outstanding (`Σ items − unmatched === printed subtotal`, which also makes the
+reported `subtotalCents` the pre-discount `Σ items`); otherwise it is left out
+and a warning is returned, because a subtotal already net of it would have the
+money subtracted twice.
 Does NOT persist anything.
 
 ### `POST /api/splits`
@@ -36,18 +44,44 @@ via `saveUpload()` from `src/lib/files.ts`), host name, venmo username
 phone; normalize with `parseZelleInput()` from `src/lib/zelle.ts` and store
 the handle), tip/tax config, and the item list (already corrected by the
 host in the UI).
+Also accepts optional `splitType: "restaurant" | "grocery"` (default
+`"restaurant"`) — what kind of bill this is. Grocery rooms allow item
+takeovers (see the claim route). The SMS creation path never sets it, so
+texted-in receipts are always restaurants.
+Also accepts the optional whole-bill discount pair: `discountType:
+"percent" | "amount" | null` (omitted or null = no discount, the default)
+and `discountValue` (percent points, or whole cents when the type is
+`"amount"`). Unlike the tip, a grocery run keeps its discount — coupons are
+exactly what a cart has. A zero discount IS no discount: both write paths
+(POST here, and PATCH below) normalize a 0 value to a stored `(null, 0)`
+rather than leaving a ghost `(amount, 0)` the host editor reads as live.
 Response: `CreateSplitResponse` — `{ splitId, hostKey, hostParticipantId, url }`.
 Implementation: `createSplit()` from store. Validate with zod: hostName
 required (1–40 chars), ≥1 item, each item name 1–80 chars, quantity int ≥1,
-cents ints ≥0, tipValue ≥ 0, taxCents ≥ 0.
+cents ints ≥0, tipValue ≥ 0, taxCents ≥ 0, discountValue ≥ 0 — capped at 100
+when the type is `"percent"` (more than 100% off a bill is meaningless; the
+tip's percent cap is 500) and at 10,000,000 whole cents when it is
+`"amount"`. A discount LARGER than the current subtotal is deliberately
+accepted — the items can still change — and clamped at compute time instead.
 
 ### `GET /api/splits/[id]`
 Response: `RoomState` (already fully assembled — including computed
 `settlement` — by `getRoomState()` from store). 404 `{error}` if unknown.
+`state.split.splitType` and `state.participants[…].isBirthday` ride along.
 
 ### `PATCH /api/splits/[id]`  (host only — `x-host-key`)
-Body: `PatchSplitPayload` — any of the meta fields and/or the full `items`
-array (full replace semantics; `replaceItems()` handles claim cleanup).
+Body: `PatchSplitPayload` — any of the meta fields, `birthdayParticipantIds`,
+and/or the full `items` array (full replace semantics; `replaceItems()` handles
+claim cleanup).
+`birthdayParticipantIds` (≤50 ids) is also FULL REPLACE: exactly those
+participants end up flagged `isBirthday`, everyone else in the split is
+cleared, and unknown ids are ignored. Send `[]` to turn birthday mode off;
+omit the field to leave the flags alone. `splitType` is fixed at creation and
+is NOT patchable.
+`discountType`/`discountValue` patch like the tip pair, with the same
+EFFECTIVE (stored + patched) re-check so a partial patch can't land an
+out-of-bounds combination. `discountType: null` clears the discount; omitting
+the field leaves it alone.
 Response: fresh `RoomState`. 401 if key mismatch (`getHostKey()`).
 
 ### `POST /api/splits/[id]/join`
@@ -68,6 +102,19 @@ Implementation:
 4. Response `ClaimResponse`: `{ parse: ParseResult | null, rejected:
    {reason}[], state: RoomState }`. Rejections come from
    `applyActions().rejected` — surface reasons; never 500 on a rejection.
+
+One action exists that the parser never emits:
+`{ type: "takeover", itemId }` — **grocery splits only**. The action carries no
+participantId of its own; the server binds it to the body's top-level
+`participantId` (one inside the action object is stripped). That identity is
+self-asserted, exactly as it is for every other claim action — the room link is
+the credential and there are no guest accounts — so this binding keeps the
+payload unambiguous, it does not authenticate the taker. Valid only while the
+item is still `sharedByAll`. It clears that flag, deletes every existing claim
+on the item, and gives the named participant the full quantity — one
+transaction, in `applyActions()`. Attempting it in a restaurant split, or on an
+item that isn't shared, comes back in `rejected[]` with a reason, exactly like
+any other invalid action.
 
 ### `POST /api/splits/[id]/pay`
 Body: `{ participantId, status: "unpaid" | "reported" | "confirmed" }`.
@@ -139,10 +186,35 @@ fries" (qty 1) = `fr(1,2)`. `split` among N people of qty q = `fr(q, N)` each
 ## Settlement semantics (already implemented — do not re-derive in UI)
 
 - `computeSettlement()` allocates each item's `totalCents` across its claims
-  plus an unclaimed remainder, then tax & tip proportional to each person's
-  item subtotal, all via largest-remainder rounding. Σ person totals +
+  plus an unclaimed remainder, then tax, tip & discount proportional to each
+  person's item subtotal, all via largest-remainder rounding. Σ person totals +
   unclaimed = grand total, exactly, always (`settlement.reconciles`).
 - `sharedByAll` items are auto-split among all current participants.
+- **Whole-bill discount.** The split carries `discountType`
+  (`"percent" | "amount" | null`) and `discountValue`;
+  `computeDiscountCents(subtotal, type, value)` turns them into cents and
+  CLAMPS the result to `[0, subtotalCents]`, so a coupon bigger than the bill
+  (or one entered against a since-shrunk receipt) can never take a total
+  negative. The tip is deliberately computed on the PRE-discount subtotal —
+  you tip on the meal you were served, not on the coupon. The discount is
+  allocated across the same buckets, with the same weights, as tax and tip,
+  and lands as `discountCents` on every person, on the unclaimed bucket, and
+  on the settlement itself. So `grandTotalCents = subtotal + tax + tip −
+  discount` and each person's `totalCents = itemsCents + taxCents + tipCents −
+  discountCents (+ birthdayAdjustmentCents)`. A person's discount share can
+  never exceed their items, so no total goes negative.
+- **Birthday mode.** Participants flagged `isBirthday` pay $0. Every person in
+  the settlement carries `isBirthday` and `birthdayAdjustmentCents`: negative
+  for a birthday person — exactly −(items + tax + tip − discount), zeroing
+  their total — and positive for everyone else, their even, exact-cent slice of
+  what was covered (largest-remainder over equal weights). So
+  `totalCents = itemsCents + taxCents + tipCents − discountCents +
+  birthdayAdjustmentCents`;
+  the other three fields stay as computed and are informational. Adjustments
+  sum to zero across the room, so `reconciles` and the grand-total invariant
+  are untouched. The unclaimed bucket is not a person: it never contributes and
+  is never adjusted. If EVERY participant is flagged the flags are ignored
+  outright — someone has to pay.
 - UIs display `settlement.people[…]` and `settlement.unclaimed`; never do
   money math client-side beyond formatting.
 

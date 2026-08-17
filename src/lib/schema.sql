@@ -14,8 +14,11 @@ CREATE TABLE IF NOT EXISTS splits (
   zelle_handle    TEXT, -- enrolled email or 10-digit US phone
   tip_type        TEXT NOT NULL DEFAULT 'percent' CHECK (tip_type IN ('percent','amount')),
   tip_value       REAL NOT NULL DEFAULT 20,
+  discount_type   TEXT CHECK (discount_type IN ('percent','amount')), -- NULL = no discount
+  discount_value  REAL NOT NULL DEFAULT 0,
   tax_cents       INTEGER NOT NULL DEFAULT 0,
   status          TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','settled')),
+  split_type      TEXT NOT NULL DEFAULT 'restaurant' CHECK (split_type IN ('restaurant','grocery')),
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -45,6 +48,7 @@ CREATE TABLE IF NOT EXISTS participants (
   split_id    TEXT NOT NULL REFERENCES splits(id) ON DELETE CASCADE,
   name        TEXT NOT NULL,
   is_host     INTEGER NOT NULL DEFAULT 0,
+  is_birthday INTEGER NOT NULL DEFAULT 0,
   paid_status TEXT NOT NULL DEFAULT 'unpaid' CHECK (paid_status IN ('unpaid','reported','confirmed')),
   joined_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );

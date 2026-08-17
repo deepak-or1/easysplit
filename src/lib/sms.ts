@@ -96,6 +96,10 @@ async function handleReceiptMms(input: InboundSms): Promise<string> {
   const receipt = media
     ? (await parseReceiptImage(media.buffer, media.mime)).receipt
     : demoReceipt();
+  // A whole-bill discount the receipt printed (plus any per-line discount money
+  // the fold couldn't match to an item) — without this the room would silently
+  // overcharge the table by exactly that amount.
+  const discountCents = receipt.discountCents ?? 0;
 
   const { splitId, hostKey, hostParticipantId } = await createSplit({
     hostName: "Host",
@@ -105,6 +109,8 @@ async function handleReceiptMms(input: InboundSms): Promise<string> {
     // Only default to 20% when the receipt carries no gratuity of its own.
     tipType: receipt.tipCents > 0 ? "amount" : "percent",
     tipValue: receipt.tipCents > 0 ? receipt.tipCents : 20,
+    discountType: discountCents > 0 ? "amount" : null,
+    discountValue: discountCents,
     taxCents: receipt.taxCents,
     items: receipt.items.map((it) => ({
       name: it.name,

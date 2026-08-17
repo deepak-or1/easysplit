@@ -6,10 +6,15 @@ import type { ClaimAction, ItemWithClaims, Participant, Frac } from "@/lib/types
 import type { ClaimResponse } from "@/lib/api";
 import { F_ONE, F_ZERO, fadd, fcmp, formatFrac, fr } from "@/lib/fraction";
 import { Avatar, Badge, Chip, Money, Spinner } from "@/components/ui";
+import { BirthdayMark } from "./BirthdayMark";
 import { SplitPicker } from "./SplitPicker";
 
+function personFor(participants: Participant[], id: string): Participant | undefined {
+  return participants.find((p) => p.id === id);
+}
+
 function nameFor(participants: Participant[], id: string): string {
-  return participants.find((p) => p.id === id)?.name ?? "?";
+  return personFor(participants, id)?.name ?? "?";
 }
 
 /** Cents still open on this line = totalCents × remaining / quantity (display hint only). */
@@ -22,11 +27,21 @@ export function ItemRow({
   participants,
   participantId,
   onClaim,
+  canTakeover = false,
+  selectable = false,
+  selected = false,
+  onToggleSelect,
 }: {
   item: ItemWithClaims;
   participants: Participant[];
   participantId: string;
   onClaim: (actions: ClaimAction[]) => Promise<ClaimResponse | null>;
+  /** Grocery rooms only: offer "this one's just mine" on shared items. */
+  canTakeover?: boolean;
+  /** Long-receipt multi-select: show the pick affordance on this row. */
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (itemId: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [splitOpen, setSplitOpen] = useState(false);
@@ -64,32 +79,80 @@ export function ItemRow({
 
   return (
     <div className={clsx("py-3", busy && "opacity-60")}>
-      <button
-        type="button"
-        disabled={!canQuickClaim || busy}
-        onClick={() =>
-          void act([{ type: "set", itemId: item.id, participantId, share: quickShare }])
-        }
-        className={clsx(
-          "flex w-full items-center gap-3 rounded-lg text-left -mx-1 px-1 min-h-[44px]",
-          canQuickClaim && "transition-colors hover:bg-cream active:bg-cream cursor-pointer",
-          !canQuickClaim && "cursor-default",
+      <div className="flex items-center gap-2">
+        {selectable && onToggleSelect && (
+          <button
+            type="button"
+            role="checkbox"
+            aria-checked={selected}
+            aria-label={`Select ${item.name}`}
+            disabled={busy}
+            onClick={() => onToggleSelect(item.id)}
+            className="-ml-1 grid size-11 shrink-0 place-items-center rounded-lg"
+          >
+            <span
+              className={clsx(
+                "grid size-6 place-items-center rounded-md border text-sm font-bold transition-colors",
+                selected
+                  ? "border-success bg-success text-white"
+                  : "border-line bg-card text-transparent",
+              )}
+            >
+              ✓
+            </span>
+          </button>
         )}
-      >
-        <span className="min-w-0 flex-1">
-          <span className="font-medium text-ink">{item.name}</span>
-          {item.quantity > 1 && (
-            <span className="ml-1.5 tabular text-sm text-muted">×{item.quantity}</span>
+        <button
+          type="button"
+          disabled={!canQuickClaim || busy}
+          onClick={() =>
+            void act([{ type: "set", itemId: item.id, participantId, share: quickShare }])
+          }
+          className={clsx(
+            "flex w-full min-w-0 flex-1 items-center gap-3 rounded-lg text-left -mx-1 px-1 min-h-[44px]",
+            canQuickClaim && "transition-colors hover:bg-cream active:bg-cream cursor-pointer",
+            !canQuickClaim && "cursor-default",
           )}
-        </span>
-        <Money cents={item.totalCents} className="font-display font-semibold text-ink" />
-        {busy && <Spinner className="size-4" />}
-      </button>
+        >
+          <span className="min-w-0 flex-1">
+            <span className="font-medium text-ink">{item.name}</span>
+            {item.quantity > 1 && (
+              <span className="ml-1.5 tabular text-sm text-muted">×{item.quantity}</span>
+            )}
+          </span>
+          <Money cents={item.totalCents} className="font-display font-semibold text-ink" />
+          {busy && <Spinner className="size-4" />}
+        </button>
+      </div>
 
       {/* Claim state */}
       <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-0.5">
         {item.sharedByAll ? (
-          <Badge tone="gold">Shared by everyone</Badge>
+          <>
+            <Badge tone="gold">Shared by everyone</Badge>
+            {canTakeover && (
+              // Chip's own colours, not this pill's: taking an item out of the
+              // cart is a grocery-only move, so it wears the kraft accent and
+              // reads as part of that identity rather than as another claim
+              // button. Hand-rolled rather than <Chip className="…"> because
+              // Tailwind emits .border-line/.text-ink AFTER the accent
+              // utilities — layered colours would lose the cascade and the
+              // pill would silently render as a plain chip.
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void act([{ type: "takeover", itemId: item.id, participantId }])}
+                className={clsx(
+                  "ml-auto whitespace-nowrap rounded-full border border-grocery/40 bg-card px-3 py-1",
+                  "text-xs font-medium text-grocery transition-colors",
+                  "hover:border-grocery hover:bg-grocery-soft active:bg-grocery-soft",
+                  "disabled:opacity-45",
+                )}
+              >
+                This one&apos;s just mine
+              </button>
+            )}
+          </>
         ) : claimants.length === 0 ? (
           <span className="text-xs text-muted">
             {isOpen ? "Tap to claim →" : ""}
@@ -98,6 +161,7 @@ export function ItemRow({
           <>
             {claimants.map((c) => {
               const isMe = c.participantId === participantId;
+              const who = personFor(participants, c.participantId);
               return (
                 <span
                   key={c.participantId}
@@ -107,6 +171,7 @@ export function ItemRow({
                   )}
                 >
                   <Avatar name={nameFor(participants, c.participantId)} size="sm" />
+                  {who?.isBirthday && <BirthdayMark name={who.name} />}
                   <span
                     className={clsx(
                       "text-xs font-semibold",
@@ -163,7 +228,7 @@ export function ItemRow({
           </Chip>
           <Chip
             disabled={busy}
-            className="border-danger/30 text-danger hover:border-danger"
+            tone="danger"
             onClick={() => void act([{ type: "unclaim", itemId: item.id, participantId }])}
           >
             ✕ Remove

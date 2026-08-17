@@ -28,8 +28,11 @@ CREATE TABLE IF NOT EXISTS splits (
   zelle_handle    TEXT, -- enrolled email or 10-digit US phone
   tip_type        TEXT NOT NULL DEFAULT 'percent' CHECK (tip_type IN ('percent','amount')),
   tip_value       DOUBLE PRECISION NOT NULL DEFAULT 20,
+  discount_type   TEXT CHECK (discount_type IN ('percent','amount')), -- NULL = no discount
+  discount_value  DOUBLE PRECISION NOT NULL DEFAULT 0,
   tax_cents       INTEGER NOT NULL DEFAULT 0,
   status          TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','settled')),
+  split_type      TEXT NOT NULL DEFAULT 'restaurant' CHECK (split_type IN ('restaurant','grocery')),
   created_at      TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD HH24:MI:SS')
 );
 
@@ -59,6 +62,7 @@ CREATE TABLE IF NOT EXISTS participants (
   split_id    TEXT NOT NULL REFERENCES splits(id) ON DELETE CASCADE,
   name        TEXT NOT NULL,
   is_host     INTEGER NOT NULL DEFAULT 0,
+  is_birthday INTEGER NOT NULL DEFAULT 0,
   paid_status TEXT NOT NULL DEFAULT 'unpaid' CHECK (paid_status IN ('unpaid','reported','confirmed')),
   joined_at   TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD HH24:MI:SS')
 );
@@ -114,8 +118,14 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   count        INTEGER NOT NULL DEFAULT 1
 );
 
--- Additive migration for pre-Zelle databases:
+-- Additive migrations for databases created before these columns existed. The
+-- CREATE TABLE statements above are IF NOT EXISTS, so they never alter a table
+-- that already exists. Kept in sync with ADDITIVE_MIGRATIONS_PG in src/lib/db.ts.
 ALTER TABLE splits ADD COLUMN IF NOT EXISTS zelle_handle TEXT;
+ALTER TABLE splits ADD COLUMN IF NOT EXISTS split_type TEXT NOT NULL DEFAULT 'restaurant' CHECK (split_type IN ('restaurant','grocery'));
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS is_birthday INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE splits ADD COLUMN IF NOT EXISTS discount_type TEXT CHECK (discount_type IN ('percent','amount'));
+ALTER TABLE splits ADD COLUMN IF NOT EXISTS discount_value DOUBLE PRECISION NOT NULL DEFAULT 0;
 
 -- Row-Level Security. The app reaches Postgres only through the server-side
 -- pool in src/lib/db.ts, connecting as the table owner — which RLS never

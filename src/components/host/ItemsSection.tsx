@@ -2,7 +2,7 @@
 
 import { nanoid } from "nanoid";
 import { useMemo, useState } from "react";
-import type { ItemWithClaims, RoomState, TipType } from "@/lib/types";
+import type { DiscountType, ItemWithClaims, Participant, RoomState, TipType } from "@/lib/types";
 import { patchSplit } from "@/lib/api";
 import { centsToDollarString, dollarsToCents } from "@/lib/money";
 import { F_ONE, fcmp, fIsNeg, fIsZero, formatFrac } from "@/lib/fraction";
@@ -44,12 +44,14 @@ export function ItemsSection(props: Props) {
 
 function ReceiptView({ room }: { room: RoomState }) {
   const { items, settlement, split, receipt } = room;
-  const nameById = useMemo(
-    () => Object.fromEntries(room.participants.map((p) => [p.id, p.name])),
+  const personById = useMemo(
+    () => Object.fromEntries(room.participants.map((p) => [p.id, p])) as Record<string, Participant>,
     [room.participants],
   );
 
   const tipLabel = split.tipType === "percent" ? `Tip (${split.tipValue}%)` : "Tip";
+  const discountLabel =
+    split.discountType === "percent" ? `Discount (${split.discountValue}%)` : "Discount";
 
   return (
     <>
@@ -61,7 +63,11 @@ function ReceiptView({ room }: { room: RoomState }) {
             {items.map((item, i) => (
               <li key={item.id}>
                 {i > 0 && <hr className="receipt-rule" />}
-                <ItemRow item={item} nameById={nameById} participantCount={room.participants.length} />
+                <ItemRow
+                  item={item}
+                  personById={personById}
+                  participantCount={room.participants.length}
+                />
               </li>
             ))}
           </ul>
@@ -72,6 +78,9 @@ function ReceiptView({ room }: { room: RoomState }) {
           <SummaryRow label="Subtotal" cents={settlement.subtotalCents} />
           {settlement.taxCents > 0 && <SummaryRow label="Tax" cents={settlement.taxCents} />}
           {settlement.tipCents > 0 && <SummaryRow label={tipLabel} cents={settlement.tipCents} />}
+          {settlement.discountCents > 0 && (
+            <SummaryRow label={discountLabel} cents={settlement.discountCents} negative />
+          )}
         </dl>
         <hr className="receipt-rule" />
         <div className="flex items-baseline justify-between py-3">
@@ -87,11 +96,11 @@ function ReceiptView({ room }: { room: RoomState }) {
 
 function ItemRow({
   item,
-  nameById,
+  personById,
   participantCount,
 }: {
   item: ItemWithClaims;
-  nameById: Record<string, string>;
+  personById: Record<string, Participant>;
   participantCount: number;
 }) {
   const remaining = item.remaining;
@@ -120,13 +129,15 @@ function ItemRow({
           <>
             {item.claims.map((c) => {
               const showShare = fcmp(c.share, F_ONE) !== 0;
+              const who = personById[c.participantId];
               return (
                 <span
                   key={c.participantId}
                   className="inline-flex items-center gap-1 text-xs text-muted"
                 >
-                  <Avatar size="sm" name={nameById[c.participantId] ?? "?"} />
-                  <span className="font-medium text-ink">{nameById[c.participantId] ?? "Someone"}</span>
+                  <Avatar size="sm" name={who?.name ?? "?"} />
+                  <span className="font-medium text-ink">{who?.name ?? "Someone"}</span>
+                  {who?.isBirthday && <span aria-hidden>🎂</span>}
                   {showShare && <span className="tabular">{formatFrac(c.share)}</span>}
                 </span>
               );
@@ -139,11 +150,22 @@ function ItemRow({
   );
 }
 
-function SummaryRow({ label, cents }: { label: string; cents: number }) {
+function SummaryRow({
+  label,
+  cents,
+  negative,
+}: {
+  label: string;
+  cents: number;
+  negative?: boolean;
+}) {
   return (
     <div className="flex items-baseline justify-between">
       <dt className="text-muted">{label}</dt>
-      <dd>
+      {/* A discount comes OFF the bill: leading minus sign (U+2212, which lines
+          up with Money's tabular figures) rather than a negative amount. */}
+      <dd className="text-ink tabular">
+        {negative && "−"}
         <Money cents={cents} className="text-ink" />
       </dd>
     </div>
@@ -188,9 +210,13 @@ interface DraftItem {
 }
 
 const TIP_PRESETS = [15, 18, 20, 25];
+const DISCOUNT_PRESETS = [10, 15, 20, 25];
 
 function ReceiptEditor({ room, splitId, hostKey, applyState, onDone }: Props & { onDone: () => void }) {
   const { split } = room;
+  // Groceries carry no tip: the editor hides it and the PATCH omits the tip
+  // fields entirely, so the 0% set at creation stays 0%.
+  const grocery = split.splitType === "grocery";
   const [items, setItems] = useState<DraftItem[]>(() =>
     room.items.map((it) => ({
       key: it.id,
@@ -208,6 +234,18 @@ function ReceiptEditor({ room, splitId, hostKey, applyState, onDone }: Props & {
   );
   const [tipFlat, setTipFlat] = useState(
     split.tipType === "amount" ? centsToDollarString(split.tipValue) : "",
+  );
+  // Unlike the tip, the discount is editable on a grocery run too — coupons are
+  // exactly what a cart has. It stays collapsed until the room actually has one.
+  const [showDiscount, setShowDiscount] = useState(split.discountType !== null);
+  const [discountType, setDiscountType] = useState<DiscountType>(split.discountType ?? "percent");
+  // A number, not free text: 100% off is a comped bill, and anything past it
+  // is a receipt the API rejects outright.
+  const [discountPercent, setDiscountPercent] = useState(
+    split.discountType === "percent" ? Number(split.discountValue) || 0 : 0,
+  );
+  const [discountFlat, setDiscountFlat] = useState(
+    split.discountType === "amount" ? centsToDollarString(split.discountValue) : "",
   );
   const [tax, setTax] = useState(centsToDollarString(split.taxCents));
   const [busy, setBusy] = useState(false);
@@ -256,11 +294,19 @@ function ReceiptEditor({ room, splitId, hostKey, applyState, onDone }: Props & {
         tipType === "percent"
           ? Math.max(0, Number(tipPercent) || 0)
           : Math.max(0, dollarsToCents(tipFlat));
+      const discountValue =
+        discountType === "percent"
+          ? Math.max(0, discountPercent || 0)
+          : Math.max(0, dollarsToCents(discountFlat));
+      // Collapsed, or opened and left at zero, both mean "no discount" — send
+      // null so the room stores none rather than a 0% one.
+      const keepDiscount = showDiscount && discountValue > 0;
       const next = await patchSplit(splitId, hostKey, {
         restaurantName: restaurantName.trim() || null,
         items: payloadItems,
-        tipType,
-        tipValue,
+        ...(grocery ? {} : { tipType, tipValue }),
+        discountType: keepDiscount ? discountType : null,
+        discountValue: keepDiscount ? discountValue : 0,
         taxCents: Math.max(0, dollarsToCents(tax)),
       });
       applyState(next);
@@ -337,59 +383,150 @@ function ReceiptEditor({ room, splitId, hostKey, applyState, onDone }: Props & {
         + Add item
       </Button>
 
-      {/* Tip editor */}
-      <div className="space-y-2 border-t border-line pt-4">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-ink">Tip</span>
-          <div className="flex gap-1.5">
-            <Chip active={tipType === "percent"} onClick={() => setTipType("percent")}>
-              %
-            </Chip>
-            <Chip active={tipType === "amount"} onClick={() => setTipType("amount")}>
-              Flat $
-            </Chip>
-          </div>
-        </div>
-
-        {tipType === "percent" ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {TIP_PRESETS.map((p) => (
-              <Chip
-                key={p}
-                active={tipPercent === String(p)}
-                onClick={() => setTipPercent(String(p))}
-              >
-                {p}%
-              </Chip>
-            ))}
-            <div className="relative w-24">
-              <Input
-                value={tipPercent}
-                onChange={(e) => setTipPercent(e.target.value)}
-                inputMode="decimal"
-                placeholder="0"
-                className="pr-7 tabular"
-                aria-label="Custom tip percent"
-              />
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
+      {/* Tip editor — restaurants only */}
+      {!grocery && (
+        <div className="space-y-2 border-t border-line pt-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-ink">Tip</span>
+            <div className="flex gap-1.5">
+              <Chip active={tipType === "percent"} onClick={() => setTipType("percent")}>
                 %
-              </span>
+              </Chip>
+              <Chip active={tipType === "amount"} onClick={() => setTipType("amount")}>
+                Flat $
+              </Chip>
             </div>
           </div>
+
+          {tipType === "percent" ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {TIP_PRESETS.map((p) => (
+                <Chip
+                  key={p}
+                  active={tipPercent === String(p)}
+                  onClick={() => setTipPercent(String(p))}
+                >
+                  {p}%
+                </Chip>
+              ))}
+              <div className="relative w-24">
+                <Input
+                  value={tipPercent}
+                  onChange={(e) => setTipPercent(e.target.value)}
+                  inputMode="decimal"
+                  placeholder="0"
+                  className="pr-7 tabular"
+                  aria-label="Custom tip percent"
+                />
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
+                  %
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="relative w-32">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">
+                $
+              </span>
+              <Input
+                value={tipFlat}
+                onChange={(e) => setTipFlat(e.target.value)}
+                inputMode="decimal"
+                placeholder="0.00"
+                className="pl-7 tabular"
+                aria-label="Flat tip amount"
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Discount — every kind of split, groceries included, and collapsed
+          until the room has one. */}
+      <div className="space-y-2 border-t border-line pt-4">
+        {!showDiscount ? (
+          <button
+            type="button"
+            onClick={() => setShowDiscount(true)}
+            className="text-xs font-medium text-muted underline-offset-2 transition-colors hover:text-ink hover:underline"
+          >
+            + Add a discount or promo
+          </button>
         ) : (
-          <div className="relative w-32">
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">
-              $
-            </span>
-            <Input
-              value={tipFlat}
-              onChange={(e) => setTipFlat(e.target.value)}
-              inputMode="decimal"
-              placeholder="0.00"
-              className="pl-7 tabular"
-              aria-label="Flat tip amount"
-            />
-          </div>
+          <>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-ink">Discount</span>
+              <div className="flex gap-1.5">
+                <Chip
+                  active={discountType === "percent"}
+                  onClick={() => setDiscountType("percent")}
+                >
+                  %
+                </Chip>
+                <Chip active={discountType === "amount"} onClick={() => setDiscountType("amount")}>
+                  Flat $
+                </Chip>
+              </div>
+            </div>
+
+            {discountType === "percent" ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {DISCOUNT_PRESETS.map((p) => (
+                  <Chip
+                    key={p}
+                    active={discountPercent === p}
+                    onClick={() => setDiscountPercent(p)}
+                  >
+                    {p}%
+                  </Chip>
+                ))}
+                <div className="relative w-24">
+                  <Input
+                    value={String(discountPercent)}
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value.replace(/[^\d]/g, ""), 10);
+                      // 100% off is a comped bill; there is nothing past it,
+                      // and the API rejects the save if there were.
+                      setDiscountPercent(Number.isFinite(n) ? Math.min(100, n) : 0);
+                    }}
+                    inputMode="numeric"
+                    placeholder="0"
+                    className="pr-7 tabular"
+                    aria-label="Custom discount percent"
+                  />
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
+                    %
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="relative w-32">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">
+                  $
+                </span>
+                <Input
+                  value={discountFlat}
+                  onChange={(e) => setDiscountFlat(e.target.value)}
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  className="pl-7 tabular"
+                  aria-label="Flat discount amount"
+                />
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowDiscount(false);
+                setDiscountPercent(0);
+                setDiscountFlat("");
+              }}
+              className="text-xs font-medium text-muted transition-colors hover:text-danger"
+            >
+              Remove
+            </button>
+          </>
         )}
       </div>
 

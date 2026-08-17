@@ -80,18 +80,25 @@ export function Input({
 
 export function Chip({
   active,
+  tone = "default",
   className,
   children,
   ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean; tone?: "default" | "danger" }) {
   return (
     <button
       type="button"
       className={clsx(
         "rounded-full px-3.5 py-1.5 text-sm font-medium border transition-colors whitespace-nowrap",
+        // Colors are picked in ONE branch: layering color utilities over the
+        // defaults via className silently loses — Tailwind emits utilities
+        // alphabetically, so e.g. .text-ink outranks an earlier .text-danger
+        // at equal specificity.
         active
           ? "bg-ink text-paper border-ink"
-          : "bg-card text-ink border-line hover:border-muted",
+          : tone === "danger"
+            ? "bg-card text-danger border-danger/30 hover:border-danger"
+            : "bg-card text-ink border-line hover:border-muted",
         className,
       )}
       {...rest}

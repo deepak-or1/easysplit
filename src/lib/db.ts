@@ -67,8 +67,11 @@ CREATE TABLE IF NOT EXISTS splits (
   zelle_handle    TEXT, -- enrolled email or 10-digit US phone
   tip_type        TEXT NOT NULL DEFAULT 'percent' CHECK (tip_type IN ('percent','amount')),
   tip_value       DOUBLE PRECISION NOT NULL DEFAULT 20,
+  discount_type   TEXT CHECK (discount_type IN ('percent','amount')), -- NULL = no discount
+  discount_value  DOUBLE PRECISION NOT NULL DEFAULT 0,
   tax_cents       INTEGER NOT NULL DEFAULT 0,
   status          TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','settled')),
+  split_type      TEXT NOT NULL DEFAULT 'restaurant' CHECK (split_type IN ('restaurant','grocery')),
   created_at      TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD HH24:MI:SS')
 );
 
@@ -98,6 +101,7 @@ CREATE TABLE IF NOT EXISTS participants (
   split_id    TEXT NOT NULL REFERENCES splits(id) ON DELETE CASCADE,
   name        TEXT NOT NULL,
   is_host     INTEGER NOT NULL DEFAULT 0,
+  is_birthday INTEGER NOT NULL DEFAULT 0,
   paid_status TEXT NOT NULL DEFAULT 'unpaid' CHECK (paid_status IN ('unpaid','reported','confirmed')),
   joined_at   TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD HH24:MI:SS')
 );
@@ -163,6 +167,30 @@ ALTER TABLE phone_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rate_limits    ENABLE ROW LEVEL SECURITY;
 `;
 
+/**
+ * Additive migrations for databases created before a column existed. The
+ * bootstrap above is CREATE TABLE IF NOT EXISTS, which is a no-op against an
+ * existing table — so every column added after a schema ships needs an entry
+ * here too, in both dialects. Kept in sync with the tail of
+ * supabase/migration.sql. Order matters only in that each is independent.
+ */
+const ADDITIVE_MIGRATIONS_PG = [
+  "ALTER TABLE splits ADD COLUMN IF NOT EXISTS zelle_handle TEXT",
+  "ALTER TABLE splits ADD COLUMN IF NOT EXISTS split_type TEXT NOT NULL DEFAULT 'restaurant' CHECK (split_type IN ('restaurant','grocery'))",
+  "ALTER TABLE participants ADD COLUMN IF NOT EXISTS is_birthday INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE splits ADD COLUMN IF NOT EXISTS discount_type TEXT CHECK (discount_type IN ('percent','amount'))",
+  "ALTER TABLE splits ADD COLUMN IF NOT EXISTS discount_value DOUBLE PRECISION NOT NULL DEFAULT 0",
+];
+
+/** Same migrations, SQLite dialect — no IF NOT EXISTS, so each is try/caught. */
+const ADDITIVE_MIGRATIONS_SQLITE = [
+  "ALTER TABLE splits ADD COLUMN zelle_handle TEXT",
+  "ALTER TABLE splits ADD COLUMN split_type TEXT NOT NULL DEFAULT 'restaurant' CHECK (split_type IN ('restaurant','grocery'))",
+  "ALTER TABLE participants ADD COLUMN is_birthday INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE splits ADD COLUMN discount_type TEXT CHECK (discount_type IN ('percent','amount'))",
+  "ALTER TABLE splits ADD COLUMN discount_value REAL NOT NULL DEFAULT 0",
+];
+
 interface PgGlobals {
   __settlePgReady?: Promise<Pool>;
 }
@@ -176,19 +204,28 @@ function readyPool(): Promise<Pool> {
   const g = globalThis as unknown as PgGlobals;
   if (g.__settlePgReady) return g.__settlePgReady;
   g.__settlePgReady = (async () => {
-    const { Pool } = await import("pg");
-    const url = process.env.DATABASE_URL as string;
-    const host = new URL(url).hostname;
-    const isLocal = host === "localhost" || host === "127.0.0.1";
-    const pool = new Pool({
-      connectionString: url,
-      // Supabase (and most hosted PG) require TLS; managed certs are fine.
-      ssl: isLocal ? undefined : { rejectUnauthorized: false },
-    });
-    await pool.query(PG_SCHEMA);
-    // Additive migrations for databases created before these columns existed.
-    await pool.query("ALTER TABLE splits ADD COLUMN IF NOT EXISTS zelle_handle TEXT");
-    return pool;
+    try {
+      const { Pool } = await import("pg");
+      const url = process.env.DATABASE_URL as string;
+      const host = new URL(url).hostname;
+      const isLocal = host === "localhost" || host === "127.0.0.1";
+      const pool = new Pool({
+        connectionString: url,
+        // Supabase (and most hosted PG) require TLS; managed certs are fine.
+        ssl: isLocal ? undefined : { rejectUnauthorized: false },
+      });
+      await pool.query(PG_SCHEMA);
+      // Additive migrations for databases created before these columns existed.
+      for (const sql of ADDITIVE_MIGRATIONS_PG) await pool.query(sql);
+      return pool;
+    } catch (err) {
+      // The promise is cached before it settles, so a rejected one would be
+      // handed to every later query — one transient ALTER/lock failure at
+      // boot would 500 the instance until it recycled. Drop it so the next
+      // request bootstraps again; the failure itself still propagates.
+      g.__settlePgReady = undefined;
+      throw err;
+    }
   })();
   return g.__settlePgReady;
 }
@@ -255,10 +292,12 @@ async function getSqlite(): Promise<BetterSqlite3.Database> {
   db.exec(fs.readFileSync(path.join(process.cwd(), "src", "lib", "schema.sql"), "utf8"));
   // Additive migrations for databases created before these columns existed
   // (SQLite has no ADD COLUMN IF NOT EXISTS — a duplicate add just throws).
-  try {
-    db.exec("ALTER TABLE splits ADD COLUMN zelle_handle TEXT");
-  } catch {
-    /* column already exists */
+  for (const sql of ADDITIVE_MIGRATIONS_SQLITE) {
+    try {
+      db.exec(sql);
+    } catch {
+      /* column already exists */
+    }
   }
   g.__settleSqlite = db;
   return db;

@@ -16,7 +16,14 @@ function item(id: string, name: string, quantity: number, sharedByAll = false): 
   };
 }
 function person(id: string, name = id): Participant {
-  return { id, name, isHost: id === "A", paidStatus: "unpaid", joinedAt: "2026-01-01T00:00:00.000Z" };
+  return {
+    id,
+    name,
+    isHost: id === "A",
+    isBirthday: false,
+    paidStatus: "unpaid",
+    joinedAt: "2026-01-01T00:00:00.000Z",
+  };
 }
 
 const PEOPLE = [person("A"), person("B"), person("C")];

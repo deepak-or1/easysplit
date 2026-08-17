@@ -34,7 +34,7 @@ export function UnclaimedPanel({
         </ul>
       )}
 
-      {(unclaimed.taxCents > 0 || unclaimed.tipCents > 0) && (
+      {(unclaimed.taxCents > 0 || unclaimed.tipCents > 0 || unclaimed.discountCents > 0) && (
         <div className="space-y-1 border-t border-gold/40 pt-2 text-sm text-[#6f5a00]">
           {unclaimed.taxCents > 0 && (
             <div className="flex justify-between">
@@ -46,6 +46,17 @@ export function UnclaimedPanel({
             <div className="flex justify-between">
               <span>Tip share</span>
               <Money cents={unclaimed.tipCents} />
+            </div>
+          )}
+          {/* The discount comes OFF this bucket: a leading minus sign (U+2212,
+              which lines up with Money's tabular figures) keeps these lines
+              summing to the badge above. */}
+          {unclaimed.discountCents > 0 && (
+            <div className="flex justify-between">
+              <span>Discount share</span>
+              <span className="tabular">
+                −<Money cents={unclaimed.discountCents} />
+              </span>
             </div>
           )}
         </div>

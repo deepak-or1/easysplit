@@ -10,11 +10,21 @@ function Line({
   label,
   cents,
   tone = "normal",
+  negative,
 }: {
   label: string;
   cents: number;
   tone?: "normal" | "muted" | "strong";
+  /** Render as money coming OFF the bill: a leading minus sign (U+2212, which
+   * lines up with Money's tabular figures) rather than a negative amount. */
+  negative?: boolean;
 }) {
+  const amountClass = clsx(
+    "shrink-0",
+    tone === "muted" && "text-sm text-muted",
+    tone === "strong" && "font-display text-lg font-semibold text-ink",
+    tone === "normal" && "text-[15px] font-medium text-ink",
+  );
   return (
     <div className="flex items-baseline justify-between gap-4 py-2">
       <span
@@ -27,15 +37,13 @@ function Line({
       >
         {label}
       </span>
-      <Money
-        cents={cents}
-        className={clsx(
-          "shrink-0",
-          tone === "muted" && "text-sm text-muted",
-          tone === "strong" && "font-display text-lg font-semibold text-ink",
-          tone === "normal" && "text-[15px] font-medium text-ink",
-        )}
-      />
+      {negative ? (
+        <span className={clsx(amountClass, "tabular")}>
+          −<Money cents={cents} />
+        </span>
+      ) : (
+        <Money cents={cents} className={amountClass} />
+      )}
     </div>
   );
 }
@@ -96,6 +104,12 @@ export function TotalCard({ ps, settled }: { ps: PersonSettlement; settled?: boo
             <Line label="Items subtotal" cents={ps.itemsCents} tone="muted" />
             <Line label="Your share of tax" cents={ps.taxCents} tone="muted" />
             <Line label="Your share of tip" cents={ps.tipCents} tone="muted" />
+            {ps.discountCents > 0 && (
+              <Line label="Discount" cents={ps.discountCents} tone="muted" negative />
+            )}
+            {ps.birthdayAdjustmentCents > 0 && (
+              <Line label="Birthday chip-in 🎂" cents={ps.birthdayAdjustmentCents} tone="muted" />
+            )}
             <hr className="receipt-rule" />
             <Line label="Total" cents={ps.totalCents} tone="strong" />
           </div>

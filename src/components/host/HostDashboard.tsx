@@ -105,7 +105,16 @@ export function HostDashboard({ splitId }: { splitId: string }) {
   return (
     <main className="mx-auto w-full max-w-lg flex-1 space-y-5 px-4 pb-16 pt-6">
       <header className="animate-[var(--animate-rise)] space-y-1">
-        <p className="text-sm font-medium text-muted">Host dashboard</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-medium text-muted">Host dashboard</p>
+          {/* Grocery rooms wear their kind; a restaurant bill is the default
+              and needs no label. */}
+          {room.split.splitType === "grocery" && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-grocery-soft px-2.5 py-0.5 text-xs font-semibold text-grocery">
+              🛒 Grocery run
+            </span>
+          )}
+        </div>
         <h1 className="font-display text-3xl font-semibold tracking-tight text-ink">{title}</h1>
         <p className="text-sm text-muted">
           Share the link, keep the receipt honest, and settle up.
@@ -127,7 +136,9 @@ export function HostDashboard({ splitId }: { splitId: string }) {
 
       <ItemsSection room={room} splitId={splitId} hostKey={hostKey} applyState={applyState} />
 
-      {room.settlement.unclaimed.totalCents > 0 && (
+      {/* Items, not money: a fully comped bill still has unclaimed items to
+          nudge the table about, and its unclaimed money is $0. */}
+      {room.settlement.unclaimed.itemsCents > 0 && (
         <UnclaimedPanel unclaimed={room.settlement.unclaimed} items={room.items} />
       )}
 

@@ -35,19 +35,78 @@ const itemSchema = z.object({
   sharedByAll: z.boolean().optional(),
 });
 
-const createSchema = z.object({
-  hostName: z.string().min(1, "your name is required").max(40, "name is too long"),
-  restaurantName: z.string().max(80).nullish(),
-  date: z.string().max(40).nullish(),
-  venmoUsername: z.string().nullish(),
-  zelleInput: z.string().max(80).nullish(),
-  venmoQrDataUrl: z.string().nullish(),
-  receiptImageDataUrl: z.string().nullish(),
-  tipType: z.enum(["percent", "amount"]),
-  tipValue: z.number().min(0, "tip can't be negative"),
-  taxCents: z.number().int("tax must be whole cents").min(0, "tax can't be negative"),
-  items: z.array(itemSchema).min(1, "add at least one item"),
-});
+/**
+ * Tip bounds. `tipValue` feeds computeTipCents(), where a percent is multiplied
+ * by the subtotal — an unbounded value there turns every later price into
+ * Infinity and permanently breaks the room, so it is capped at parse time.
+ */
+const MAX_TIP_PERCENT = 500;
+const MAX_TIP_CENTS = 10_000_000; // $100,000
+
+/**
+ * Discount bounds, the same shape as the tip ones with one difference: more
+ * than 100% off a bill is meaningless, so the percent cap is 100 rather than
+ * 500. An amount larger than the current subtotal is deliberately ALLOWED here
+ * — the items can still change — and computeDiscountCents clamps it at compute
+ * time instead.
+ */
+const MAX_DISCOUNT_PERCENT = 100;
+const MAX_DISCOUNT_CENTS = MAX_TIP_CENTS; // $100,000
+
+const createSchema = z
+  .object({
+    hostName: z.string().min(1, "your name is required").max(40, "name is too long"),
+    restaurantName: z.string().max(80).nullish(),
+    date: z.string().max(40).nullish(),
+    venmoUsername: z.string().nullish(),
+    zelleInput: z.string().max(80).nullish(),
+    venmoQrDataUrl: z.string().nullish(),
+    receiptImageDataUrl: z.string().nullish(),
+    tipType: z.enum(["percent", "amount"]),
+    tipValue: z.number().finite().min(0, "tip can't be negative"),
+    discountType: z.enum(["percent", "amount"]).nullable().optional(),
+    discountValue: z.number().finite().min(0, "discount can't be negative").optional(),
+    taxCents: z.number().int("tax must be whole cents").min(0, "tax can't be negative"),
+    splitType: z.enum(["restaurant", "grocery"]).optional(),
+    items: z.array(itemSchema).min(1, "add at least one item"),
+  })
+  .superRefine((data, ctx) => {
+    if (data.tipType === "percent") {
+      if (data.tipValue > MAX_TIP_PERCENT) {
+        ctx.addIssue({ code: "custom", message: "tip percent too large", path: ["tipValue"] });
+      }
+      return;
+    }
+    if (!Number.isInteger(data.tipValue)) {
+      ctx.addIssue({ code: "custom", message: "tip must be whole cents", path: ["tipValue"] });
+    } else if (data.tipValue > MAX_TIP_CENTS) {
+      ctx.addIssue({ code: "custom", message: "tip too large", path: ["tipValue"] });
+    }
+  })
+  .superRefine((data, ctx) => {
+    // No type means no discount at all — the value rides along unused.
+    if (!data.discountType) return;
+    const value = data.discountValue ?? 0;
+    if (data.discountType === "percent") {
+      if (value > MAX_DISCOUNT_PERCENT) {
+        ctx.addIssue({
+          code: "custom",
+          message: "discount percent too large",
+          path: ["discountValue"],
+        });
+      }
+      return;
+    }
+    if (!Number.isInteger(value)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "discount must be whole cents",
+        path: ["discountValue"],
+      });
+    } else if (value > MAX_DISCOUNT_CENTS) {
+      ctx.addIssue({ code: "custom", message: "discount too large", path: ["discountValue"] });
+    }
+  });
 
 export async function POST(req: Request) {
   let body: unknown;
@@ -87,6 +146,13 @@ export async function POST(req: Request) {
     sharedByAll: it.sharedByAll ?? false,
   }));
 
+  // A zero-value discount IS no discount: store none rather than an
+  // (amount, 0) ghost the host dashboard reads as a live discount and
+  // auto-expands its editor for.
+  const discountType = data.discountType ?? null;
+  const discountValue = data.discountValue ?? 0;
+  const hasDiscount = discountType !== null && discountValue > 0;
+
   const result = await createSplit({
     restaurantName: data.restaurantName ?? null,
     date: data.date ?? null,
@@ -96,7 +162,10 @@ export async function POST(req: Request) {
     venmoQrPath,
     tipType: data.tipType,
     tipValue: data.tipValue,
+    discountType: hasDiscount ? discountType : null,
+    discountValue: hasDiscount ? discountValue : 0,
     taxCents: data.taxCents,
+    splitType: data.splitType ?? "restaurant",
     imagePath,
     items,
   });

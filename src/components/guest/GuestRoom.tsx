@@ -1,9 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRoom } from "@/lib/use-room";
-import { getStoredParticipantId, sendClaim, type ClaimResponse } from "@/lib/api";
-import type { ClaimAction, Participant } from "@/lib/types";
+import {
+  getStoredParticipantId,
+  recordRecentSplit,
+  sendClaim,
+  type ClaimResponse,
+} from "@/lib/api";
+import type { ClaimAction, Participant, RoomState } from "@/lib/types";
 import { Button, EmptyState, ErrorNote, Spinner } from "@/components/ui";
 import { NameGate } from "./NameGate";
 import { RoomHeader } from "./RoomHeader";
@@ -11,6 +16,12 @@ import { ReceiptList } from "./ReceiptList";
 import { ChatPanel } from "./ChatPanel";
 import { StickyTotal } from "./StickyTotal";
 import { Toast } from "./Toast";
+import {
+  buildSelectionActions,
+  isLongReceipt,
+  pruneSelection,
+  toggleSelected,
+} from "./list-helpers";
 
 /** A room load error whose message reads like "not found" is a bad/expired link. */
 function looksMissing(message: string): boolean {
@@ -20,6 +31,14 @@ function looksMissing(message: string): boolean {
 function Screen({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center px-4">{children}</div>
+  );
+}
+
+/** What this room is called in the "your splits" list back on the home page. */
+function roomName(room: RoomState): string {
+  return (
+    room.split.restaurantName?.trim() ||
+    (room.split.splitType === "grocery" ? "Grocery run" : "Dinner")
   );
 }
 
@@ -45,6 +64,9 @@ export function GuestRoom({ splitId }: { splitId: string }) {
   const participantId = joinedId ?? storedParticipantId;
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Long-receipt multi-select: the pile of items waiting on one "these are mine".
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set<string>());
+  const [claimingSelection, setClaimingSelection] = useState(false);
 
   useEffect(
     () => () => {
@@ -91,9 +113,46 @@ export function GuestRoom({ splitId }: { splitId: string }) {
         { revalidate: true },
       );
       setJoinedId(p.id);
+      // Guests reach a room by link once and then lose it — remember the room
+      // so the home page can hand it back.
+      if (room) {
+        recordRecentSplit({
+          splitId,
+          name: roomName(room),
+          role: "guest",
+          at: new Date().toISOString(),
+        });
+      }
     },
-    [mutate],
+    [mutate, room, splitId],
   );
+
+  // Someone else may claim a pending pick while it sits selected; derive the
+  // still-claimable pile on every render rather than POSTing a share that no
+  // longer exists. Derived, not stored: if the item frees up again the pick
+  // simply comes back.
+  const liveSelected = useMemo(
+    () => (room && participantId ? pruneSelection(selected, room.items, participantId) : selected),
+    [room, participantId, selected],
+  );
+
+  const toggleSelect = useCallback((itemId: string) => {
+    setSelected((prev) => toggleSelected(prev, itemId));
+  }, []);
+
+  const claimSelection = useCallback(async () => {
+    if (!room || !participantId) return;
+    const actions = buildSelectionActions(room.items, liveSelected, participantId);
+    if (actions.length === 0) return;
+    setClaimingSelection(true);
+    try {
+      // One POST for the whole pile — N set-actions, each taking what's left.
+      const res = await submitClaim({ actions });
+      if (res) setSelected(new Set<string>());
+    } finally {
+      setClaimingSelection(false);
+    }
+  }, [room, participantId, liveSelected, submitClaim]);
 
   // ---- Loading & error gates ----
   if (!hydrated || (isLoading && !room)) {
@@ -144,12 +203,17 @@ export function GuestRoom({ splitId }: { splitId: string }) {
   const meSettlement = room.settlement.people.find((p) => p.participantId === participantId);
   const myTotal = meSettlement?.totalCents ?? 0;
   const hasClaims = (meSettlement?.lines.length ?? 0) > 0;
+  const longReceipt = isLongReceipt(room.items);
+  const selectionCount = longReceipt
+    ? buildSelectionActions(room.items, liveSelected, participantId).length
+    : 0;
 
   return (
     <div className="flex min-h-dvh flex-col">
       <div className="mx-auto w-full max-w-md flex-1 px-4 pb-8 pt-6">
         <RoomHeader
           split={room.split}
+          splitId={splitId}
           settlement={room.settlement}
           participants={room.participants}
           meId={participantId}
@@ -164,6 +228,9 @@ export function GuestRoom({ splitId }: { splitId: string }) {
             participants={room.participants}
             participantId={participantId}
             onClaim={(actions) => submitClaim({ actions })}
+            canTakeover={room.split.splitType === "grocery"}
+            selected={liveSelected}
+            onToggleSelect={longReceipt ? toggleSelect : undefined}
           />
         </section>
 
@@ -173,7 +240,9 @@ export function GuestRoom({ splitId }: { splitId: string }) {
           </h2>
           <ChatPanel
             feed={room.feed}
+            participants={room.participants}
             participantId={participantId}
+            grocery={room.split.splitType === "grocery"}
             onSend={(message) => submitClaim({ message })}
           />
         </section>
@@ -185,6 +254,18 @@ export function GuestRoom({ splitId }: { splitId: string }) {
         total={myTotal}
         hostName={room.split.hostName}
         hasClaims={hasClaims}
+        isBirthday={meSettlement?.isBirthday ?? me.isBirthday}
+        birthdayChipInCents={meSettlement?.birthdayAdjustmentCents ?? 0}
+        selection={
+          selectionCount > 0
+            ? {
+                count: selectionCount,
+                busy: claimingSelection,
+                onClaim: () => void claimSelection(),
+                onClear: () => setSelected(new Set<string>()),
+              }
+            : null
+        }
       />
 
       <Toast message={toast} />

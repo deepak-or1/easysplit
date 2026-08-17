@@ -1,6 +1,7 @@
 import { Card, Money } from "@/components/ui";
 import { LinkButton } from "@/components/new/LinkButton";
 import { Logo } from "@/components/Logo";
+import { YourSplits } from "@/components/home/YourSplits";
 
 /* Landing — the pitch. Warm, confident, one accent color. Server component. */
 
@@ -85,6 +86,9 @@ export default function Home() {
             </div>
           </div>
         </section>
+
+        {/* Rooms this browser has been in — client-only, appears when there are any */}
+        <YourSplits />
 
         {/* How it works */}
         <section className="flex flex-col gap-4">

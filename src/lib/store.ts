@@ -1,11 +1,12 @@
 import { getDb } from "./db";
-import { fr, fsub, F_ZERO } from "./fraction";
+import { fcmp, fr, fsub, fsum, F_ZERO } from "./fraction";
 import { newHostKey, newId, newRoomId } from "./ids";
 import { applyClaimActions, type ApplyResult } from "./claims";
 import { claimedShare, computeSettlement, computeTipCents } from "./split-math";
 import type {
   Claim,
   ClaimAction,
+  DiscountType,
   FeedMessage,
   ItemWithClaims,
   MessageChannel,
@@ -14,6 +15,7 @@ import type {
   ReceiptItem,
   RoomState,
   Split,
+  SplitType,
   TipType,
 } from "./types";
 
@@ -39,8 +41,11 @@ interface SplitRow {
   zelle_handle: string | null;
   tip_type: TipType;
   tip_value: number;
+  discount_type: DiscountType | null;
+  discount_value: number;
   tax_cents: number;
   status: "open" | "settled";
+  split_type: SplitType;
   created_at: string;
 }
 
@@ -60,6 +65,7 @@ interface ParticipantRow {
   split_id: string;
   name: string;
   is_host: number;
+  is_birthday: number;
   paid_status: PaidStatus;
   joined_at: string;
 }
@@ -82,8 +88,13 @@ function toSplit(r: SplitRow): Split {
     zelleHandle: r.zelle_handle,
     tipType: r.tip_type,
     tipValue: r.tip_value,
+    // Rooms created before the discount column exists read back undefined on
+    // SQLite; normalize to the "no discount" pair the whole app expects.
+    discountType: r.discount_type ?? null,
+    discountValue: r.discount_value ?? 0,
     taxCents: r.tax_cents,
     status: r.status,
+    splitType: r.split_type,
     createdAt: r.created_at,
   };
 }
@@ -105,6 +116,7 @@ function toParticipant(r: ParticipantRow): Participant {
     id: r.id,
     name: r.name,
     isHost: r.is_host === 1,
+    isBirthday: r.is_birthday === 1,
     paidStatus: r.paid_status,
     joinedAt: r.joined_at,
   };
@@ -139,7 +151,10 @@ export interface CreateSplitInput {
   zelleHandle?: string | null; // normalized by parseZelleInput
   tipType: TipType;
   tipValue: number;
+  discountType?: DiscountType | null; // defaults to null = no discount
+  discountValue?: number; // defaults to 0
   taxCents: number;
+  splitType?: SplitType; // defaults to "restaurant" (the SMS path never sets it)
   imagePath?: string | null; // stored upload filename
   ocrJson?: string | null;
   items: NewItemInput[];
@@ -160,8 +175,8 @@ export async function createSplit(input: CreateSplitInput): Promise<CreateSplitR
 
   await db.tx(async (q) => {
     await q.run(
-      `INSERT INTO splits (id, host_key, restaurant_name, date, host_name, venmo_username, venmo_qr_path, zelle_handle, tip_type, tip_value, tax_cents)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO splits (id, host_key, restaurant_name, date, host_name, venmo_username, venmo_qr_path, zelle_handle, tip_type, tip_value, discount_type, discount_value, tax_cents, split_type)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         splitId,
         hostKey,
@@ -173,7 +188,10 @@ export async function createSplit(input: CreateSplitInput): Promise<CreateSplitR
         input.zelleHandle ?? null,
         input.tipType,
         input.tipValue,
+        input.discountType ?? null,
+        input.discountValue ?? 0,
         input.taxCents,
+        input.splitType ?? "restaurant",
       ],
     );
     await q.run(`INSERT INTO receipts (id, split_id, image_path, ocr_json) VALUES (?, ?, ?, ?)`, [
@@ -280,6 +298,8 @@ export async function getRoomState(splitId: string): Promise<RoomState | null> {
     taxCents: split.taxCents,
     tipType: split.tipType,
     tipValue: split.tipValue,
+    discountType: split.discountType,
+    discountValue: split.discountValue,
   });
 
   const itemsWithClaims: ItemWithClaims[] = items.map((item) => {
@@ -337,6 +357,8 @@ export interface SplitMetaPatch {
   zelleHandle?: string | null;
   tipType?: TipType;
   tipValue?: number;
+  discountType?: DiscountType | null; // null clears the discount
+  discountValue?: number;
   taxCents?: number;
   status?: "open" | "settled";
 }
@@ -351,6 +373,8 @@ export async function updateSplitMeta(splitId: string, patch: SplitMetaPatch): P
     ["zelleHandle", "zelle_handle"],
     ["tipType", "tip_type"],
     ["tipValue", "tip_value"],
+    ["discountType", "discount_type"],
+    ["discountValue", "discount_value"],
     ["taxCents", "tax_cents"],
     ["status", "status"],
   ];
@@ -400,11 +424,23 @@ export async function replaceItems(splitId: string, items: EditableItem[]): Prom
           `UPDATE receipt_items SET name = ?, quantity = ?, unit_price_cents = ?, total_cents = ?, shared_by_all = ?, sort_order = ? WHERE id = ? AND receipt_id = ?`,
           [it.name, qty, it.unitPriceCents, it.totalCents, shared, i, it.id, receipt.id],
         );
-        // Shrinking quantity can strand over-claims; drop claims that no longer fit.
-        await q.run(`DELETE FROM claims WHERE item_id = ? AND CAST(share_n AS REAL) / share_d > ?`, [
-          it.id,
-          qty,
-        ]);
+        // Shrinking quantity can strand over-claims. Per-claim pruning isn't
+        // enough: three people holding 1 each of a qty-3 item all still "fit"
+        // at qty 2, but together they over-claim it, and split-math would
+        // silently clamp and re-price everyone. So if the CLAIMED TOTAL no
+        // longer fits, every claim on the item goes and guests re-claim.
+        // Summed here with the exact Frac helpers rather than in SQL — float
+        // division would have to be written twice, once per driver dialect.
+        const claimRows = await q.all<{ share_n: number; share_d: number }>(
+          `SELECT share_n, share_d FROM claims WHERE item_id = ?`,
+          [it.id],
+        );
+        if (claimRows.length) {
+          const claimed = fsum(claimRows.map((c) => fr(c.share_n, c.share_d)));
+          if (fcmp(claimed, fr(qty)) > 0) {
+            await q.run(`DELETE FROM claims WHERE item_id = ?`, [it.id]);
+          }
+        }
       } else {
         await q.run(
           `INSERT INTO receipt_items (id, receipt_id, name, quantity, unit_price_cents, total_cents, shared_by_all, sort_order)
@@ -438,6 +474,26 @@ export async function joinParticipant(splitId: string, name: string): Promise<Pa
   ]);
   const row = await db.get<ParticipantRow>(`SELECT * FROM participants WHERE id = ?`, [id]);
   return toParticipant(row as ParticipantRow);
+}
+
+/**
+ * Host-only: set the birthday flag on exactly `participantIds` and clear it on
+ * everyone else in the split. Unknown ids match no row and are ignored. One
+ * transaction, so the room is never briefly flagless.
+ */
+export async function setBirthdayParticipants(
+  splitId: string,
+  participantIds: string[],
+): Promise<void> {
+  await getDb().tx(async (q) => {
+    await q.run(`UPDATE participants SET is_birthday = 0 WHERE split_id = ?`, [splitId]);
+    for (const pid of participantIds) {
+      await q.run(`UPDATE participants SET is_birthday = 1 WHERE split_id = ? AND id = ?`, [
+        splitId,
+        pid,
+      ]);
+    }
+  });
 }
 
 export async function getParticipants(splitId: string): Promise<Participant[]> {
@@ -489,10 +545,26 @@ export async function applyActions(splitId: string, actions: ClaimAction[]): Pro
   const db = getDb();
   const { items, claims } = await loadItemsAndClaims(splitId);
   const participants = await getParticipants(splitId);
-  const result = applyClaimActions(items, claims, actions, participants);
+  const splitRow = await db.get<{ split_type: SplitType }>(
+    `SELECT split_type FROM splits WHERE id = ?`,
+    [splitId],
+  );
+  const result = applyClaimActions(
+    items,
+    claims,
+    actions,
+    participants,
+    splitRow?.split_type ?? "restaurant",
+  );
 
   if (result.changedItemIds.length) {
     await db.tx(async (q) => {
+      // Unshare first: a taken-over item must stop being sharedByAll in the
+      // same transaction that gives its claim to one person, or a concurrent
+      // read would see a shared item with an explicit claim on it.
+      for (const itemId of result.unsharedItemIds) {
+        await q.run(`UPDATE receipt_items SET shared_by_all = 0 WHERE id = ?`, [itemId]);
+      }
       for (const itemId of result.changedItemIds) {
         await q.run(`DELETE FROM claims WHERE item_id = ?`, [itemId]);
         for (const c of result.claims.filter((c) => c.itemId === itemId)) {

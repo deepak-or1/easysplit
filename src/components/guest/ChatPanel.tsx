@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { Clarification, FeedMessage } from "@/lib/types";
+import type { Clarification, FeedMessage, Participant } from "@/lib/types";
 import type { ClaimResponse } from "@/lib/api";
 import { Avatar, Chip } from "@/components/ui";
+import { BirthdayMark } from "./BirthdayMark";
 
 function BotBubble({ children }: { children: React.ReactNode }) {
   return (
@@ -15,13 +16,18 @@ function BotBubble({ children }: { children: React.ReactNode }) {
 
 export function ChatPanel({
   feed,
+  participants,
   participantId,
+  grocery = false,
   onSend,
 }: {
   feed: FeedMessage[];
+  participants: Participant[];
   participantId: string;
+  grocery?: boolean;
   onSend: (message: string) => Promise<ClaimResponse | null>;
 }) {
+  const example = grocery ? "I grabbed the oat milk and the granola" : "I had the burger and half the fries";
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [clarify, setClarify] = useState<Clarification | null>(null);
@@ -54,18 +60,22 @@ export function ChatPanel({
       <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
         {sorted.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">
-            No messages yet — try “I had the burger and half the fries”.
+            No messages yet — try “{example}”.
           </p>
         ) : (
           sorted.map((m) => {
             const isMe = m.participantId === participantId;
             const label = isMe ? "You" : m.participantName ?? "Someone";
+            const author = participants.find((p) => p.id === m.participantId);
             return (
               <div key={m.id}>
                 <div className="flex items-start gap-2">
                   <Avatar name={m.participantName ?? "?"} size="sm" />
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold text-muted">{label}</p>
+                    <p className="flex items-center gap-1 text-xs font-semibold text-muted">
+                      {label}
+                      {author?.isBirthday && <BirthdayMark name={author.name} />}
+                    </p>
                     <p className="break-words text-[15px] leading-snug text-ink">{m.body}</p>
                   </div>
                 </div>
@@ -91,7 +101,7 @@ export function ChatPanel({
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="I had the burger and half the fries…"
+          placeholder={`${example}…`}
           enterKeyHint="send"
           aria-label="Chat message"
           className="min-w-0 flex-1 rounded-full border border-line bg-paper px-4 py-2.5 text-base text-ink outline-none placeholder:text-muted/70 focus:border-primary focus:ring-2 focus:ring-primary/20"

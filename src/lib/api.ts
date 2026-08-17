@@ -1,10 +1,12 @@
 import type {
   ClaimAction,
+  DiscountType,
   Frac,
   Participant,
   ParseResult,
   ReceiptParseResponse,
   RoomState,
+  SplitType,
   TipType,
 } from "./types";
 
@@ -36,7 +38,10 @@ export interface CreateSplitPayload {
   receiptImageDataUrl?: string | null; // base64 data URL of the receipt photo
   tipType: TipType;
   tipValue: number;
+  discountType?: DiscountType | null; // omitted / null = no discount
+  discountValue?: number; // percent, or cents when discountType === "amount"
   taxCents: number;
+  splitType?: SplitType; // defaults to "restaurant"
   items: { name: string; quantity: number; unitPriceCents: number; totalCents: number; sharedByAll: boolean }[];
 }
 
@@ -66,8 +71,13 @@ export interface PatchSplitPayload {
   zelleHandle?: string | null; // raw email/phone; server normalizes
   tipType?: TipType;
   tipValue?: number;
+  /** null clears the discount; omit to leave it alone. */
+  discountType?: DiscountType | null;
+  discountValue?: number;
   taxCents?: number;
   status?: "open" | "settled";
+  /** Full replace — exactly these people are birthday people; [] clears it. */
+  birthdayParticipantIds?: string[];
   items?: {
     id?: string;
     name: string;
@@ -141,11 +151,13 @@ export function parseReceipt(imageDataUrl: string): Promise<ReceiptParseResponse
   });
 }
 
-export function demoReceipt(): Promise<ReceiptParseResponse> {
+/** The sample receipt, in the shape of the bill being split — a grocery run
+ * gets a cart, everything else gets the restaurant check. */
+export function demoReceipt(kind: SplitType = "restaurant"): Promise<ReceiptParseResponse> {
   return jsonFetch("/api/receipts/parse", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ demo: true }),
+    body: JSON.stringify({ demo: true, kind }),
   });
 }
 
@@ -167,4 +179,62 @@ export function getStoredHostKey(splitId: string): string | null {
 
 export function storeHostKey(splitId: string, hostKey: string): void {
   localStorage.setItem(`settle:${splitId}:hostKey`, hostKey);
+}
+
+/* ---------------- recent-splits registry ---------------- */
+
+/**
+ * Rooms this browser has opened, newest first, so someone can find their way
+ * back to a split without the link. Purely local — there are no accounts, so
+ * this list is the only "my splits" that exists.
+ */
+export interface RecentSplit {
+  splitId: string;
+  name: string;
+  role: "host" | "guest";
+  at: string; // ISO timestamp
+}
+
+const RECENT_KEY = "settle:recent";
+const RECENT_LIMIT = 20;
+
+/** Newest first. Absent, unparseable or non-array storage all read as empty. */
+export function getRecentSplits(): RecentSplit[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(RECENT_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    // Entries are dropped rather than trusted: storage is shared with older
+    // builds and with anything else that can write this key, so every field
+    // the RecentSplit type promises is checked — a caller doing `.name.trim()`
+    // must not be handed an entry that only happens to have a splitId.
+    return parsed.filter((e): e is RecentSplit => {
+      if (!e || typeof e !== "object") return false;
+      const r = e as Partial<RecentSplit>;
+      return (
+        typeof r.splitId === "string" &&
+        typeof r.name === "string" &&
+        (r.role === "host" || r.role === "guest") &&
+        typeof r.at === "string"
+      );
+    });
+  } catch {
+    return [];
+  }
+}
+
+/** Prepend (de-duplicating on splitId) and cap the list. No-op during SSR. */
+export function recordRecentSplit(entry: RecentSplit): void {
+  if (typeof window === "undefined") return;
+  const next = [entry, ...getRecentSplits().filter((e) => e.splitId !== entry.splitId)].slice(
+    0,
+    RECENT_LIMIT,
+  );
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  } catch {
+    /* storage full or blocked — the registry is a convenience, never load-bearing */
+  }
 }

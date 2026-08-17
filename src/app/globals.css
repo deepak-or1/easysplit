@@ -3,7 +3,8 @@
 /*
  * EasySplit design tokens — warm "dinner table" palette, deliberately single-theme.
  * Usage: bg-paper, text-ink, text-muted, border-line, bg-primary, text-primary,
- * bg-card, bg-success, text-success, bg-gold, bg-venmo, font-display, font-sans.
+ * bg-card, bg-success, text-success, bg-gold, bg-grocery, bg-venmo,
+ * font-display, font-sans.
  * See docs/DESIGN.md for the full direction.
  */
 @theme {
@@ -23,6 +24,12 @@
   --color-success-soft: #e1f4ea;
   --color-gold: #ffd84d; /* highlighter yellow — progress, unclaimed */
   --color-gold-soft: #fff4c7;
+  /* Grocery runs get their own identity: kraft paper bag against the receipt
+     paper. Accent only — the CTA red never changes. #816235 on #f2e9d8 is
+     4.67:1 (WCAG AA), which is why the brown sits a shade under the sample
+     kraft it was picked from. */
+  --color-grocery: #816235; /* kraft brown — grocery pills, chips, notes */
+  --color-grocery-soft: #f2e9d8; /* paper-bag tan — tinted backgrounds */
   --color-venmo: #008cff; /* Venmo brand blue, pay buttons only */
   --color-venmo-deep: #0074d4;
   --color-zelle: #6d1ed4; /* Zelle brand purple, pay actions only */

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { parseReceiptImage } from "@/lib/ocr";
-import { DEMO_RECEIPT } from "@/lib/demo-receipt";
+import { DEMO_GROCERY_RECEIPT, DEMO_RECEIPT } from "@/lib/demo-receipt";
 import { checkRateLimit } from "@/lib/store";
 import type { ReceiptParseResponse } from "@/lib/types";
 
@@ -26,7 +26,13 @@ function decodeDataUrl(dataUrl: string): DecodedUpload {
 }
 
 const parseSchema = z.union([
-  z.object({ demo: z.literal(true) }),
+  z.object({
+    demo: z.literal(true),
+    // Which sample receipt to hand back. `.catch` keeps this forgiving on
+    // purpose: a stale client or a typo'd kind still gets sample data — the
+    // restaurant one — instead of a 400 on a request that costs nothing.
+    kind: z.enum(["restaurant", "grocery"]).catch("restaurant").optional(),
+  }),
   z.object({ imageDataUrl: z.string().min(1, "imageDataUrl is required") }),
 ]);
 
@@ -46,7 +52,8 @@ export async function POST(req: Request) {
   }
 
   if ("demo" in parsed.data) {
-    const response: ReceiptParseResponse = { source: "mock", receipt: DEMO_RECEIPT };
+    const receipt = parsed.data.kind === "grocery" ? DEMO_GROCERY_RECEIPT : DEMO_RECEIPT;
+    const response: ReceiptParseResponse = { source: "mock", receipt };
     return Response.json(response);
   }
 

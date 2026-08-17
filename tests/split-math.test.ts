@@ -16,8 +16,8 @@ function item(
 ): ReceiptItem {
   return { id, name, quantity, unitPriceCents, totalCents, sharedByAll, sortOrder };
 }
-function person(id: string, name: string, isHost = false): Participant {
-  return { id, name, isHost, paidStatus: "unpaid", joinedAt: "2026-01-01T00:00:00.000Z" };
+function person(id: string, name: string, isHost = false, isBirthday = false): Participant {
+  return { id, name, isHost, isBirthday, paidStatus: "unpaid", joinedAt: "2026-01-01T00:00:00.000Z" };
 }
 function claim(itemId: string, participantId: string, share: Frac): Claim {
   return { itemId, participantId, share };
@@ -258,6 +258,76 @@ describe("computeSettlement — PROPERTY (200 seeded random scenarios)", () => {
       for (const n of nums) {
         expect(Number.isInteger(n)).toBe(true);
         expect(n).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+});
+
+describe("computeSettlement — PROPERTY with birthday flags (200 seeded scenarios)", () => {
+  it("always reconciles, and every non-birthday total stays a non-negative integer", () => {
+    const rng = mulberry32(0xb1_47_da);
+    const shares: Frac[] = [fr(1, 1), fr(1, 2), fr(1, 3), fr(2, 3), fr(2, 1), fr(3, 1)];
+
+    for (let scenario = 0; scenario < 200; scenario++) {
+      const nItems = randInt(rng, 1, 12);
+      const nPeople = randInt(rng, 1, 6);
+      const participants: Participant[] = [];
+      for (let i = 0; i < nPeople; i++) {
+        // ~30% flagged, so all-birthday rooms (the no-op path) come up too.
+        participants.push(person(`p${i}`, `P${i}`, i === 0, rng() < 0.3));
+      }
+
+      const items: ReceiptItem[] = [];
+      const claims: Claim[] = [];
+      for (let i = 0; i < nItems; i++) {
+        const qty = randInt(rng, 1, 4);
+        const unit = randInt(rng, 1, 5000);
+        const shared = rng() < 0.2;
+        const id = `i${i}`;
+        items.push(item(id, `Item ${i}`, qty, unit, unit * qty, shared, i));
+        if (!shared) {
+          for (const p of participants) {
+            if (rng() < 0.5) {
+              claims.push(claim(id, p.id, shares[randInt(rng, 0, shares.length - 1)]));
+            }
+          }
+        }
+      }
+
+      const taxCents = randInt(rng, 0, 3000);
+      const tipType = rng() < 0.5 ? "percent" : "amount";
+      const tipValue = tipType === "percent" ? randInt(rng, 0, 30) : randInt(rng, 0, 4000);
+
+      const s = computeSettlement({ items, claims, participants, taxCents, tipType, tipValue });
+
+      // The invariant birthday mode must never break.
+      expect(s.reconciles).toBe(true);
+      const sum = s.people.reduce((acc, p) => acc + p.totalCents, 0) + s.unclaimed.totalCents;
+      expect(sum).toBe(s.grandTotalCents);
+
+      // Adjustments are a pure transfer: they cancel exactly.
+      expect(s.people.reduce((acc, p) => acc + p.birthdayAdjustmentCents, 0)).toBe(0);
+
+      const anyContributor = s.people.some((p) => !p.isBirthday);
+      for (const p of s.people) {
+        expect(Number.isInteger(p.birthdayAdjustmentCents)).toBe(true);
+        expect(p.totalCents).toBe(
+          p.itemsCents + p.taxCents + p.tipCents + p.birthdayAdjustmentCents,
+        );
+        if (p.isBirthday && anyContributor) {
+          // Flagged, and someone is left to pay: they owe nothing, because the
+          // adjustment cancels their share exactly.
+          expect(p.totalCents).toBe(0);
+          expect(p.birthdayAdjustmentCents + p.itemsCents + p.taxCents + p.tipCents).toBe(0);
+        } else {
+          expect(Number.isInteger(p.totalCents)).toBe(true);
+          expect(p.totalCents).toBeGreaterThanOrEqual(0);
+        }
+      }
+
+      // With no one left to pay, the flags are ignored outright.
+      if (!anyContributor) {
+        for (const p of s.people) expect(p.birthdayAdjustmentCents).toBe(0);
       }
     }
   });

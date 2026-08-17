@@ -2,7 +2,7 @@ import jsQR from "jsqr";
 import { nanoid } from "nanoid";
 import type { CreateSplitPayload } from "@/lib/api";
 import { centsToDollarString, dollarsToCents } from "@/lib/money";
-import type { ParsedReceipt, TipType } from "@/lib/types";
+import type { DiscountType, ParsedReceipt, SplitType, TipType } from "@/lib/types";
 import { parseVenmoInput } from "@/lib/venmo";
 
 /**
@@ -16,19 +16,33 @@ export interface DraftItem {
   quantity: number; // whole units, >= 1
   price: string; // UNIT price in dollars, as typed
   sharedByAll: boolean;
+  /**
+   * The line total the receipt actually printed, kept ONLY when it disagrees
+   * with quantity × unit price — which happens whenever ocr.ts had to back-fill
+   * a unit price by dividing an indivisible total ("3 Tacos $10.00" → 333¢ each,
+   * which multiplies back to 999¢). Undefined for every other item, and cleared
+   * the moment the host edits the price or quantity (see applyItemEdit).
+   */
+  receiptTotalCents?: number;
 }
 
 export interface Draft {
+  /** What kind of bill this is. Grocery runs skip the tip and share by default. */
+  splitType: SplitType;
   restaurantName: string;
   date: string; // yyyy-mm-dd (input[type=date])
   items: DraftItem[];
   tax: string; // dollars, as typed
   ocrSubtotalCents: number | null; // printed subtotal from parse, for a sanity check
   ocrTipCents: number | null; // printed tip/service charge from parse (already owed!)
+  ocrDiscountCents: number | null; // whole-bill discount read off the receipt
   hostName: string;
   tipMode: TipType; // "percent" | "amount"
   tipPercent: number; // used when tipMode === "percent"
   tipFlat: string; // dollars, used when tipMode === "amount"
+  discountMode: DiscountType; // "percent" | "amount"
+  discountPercent: number; // used when discountMode === "percent"
+  discountFlat: string; // dollars, used when discountMode === "amount"
   venmoInput: string; // raw text the host typed
   venmoUsername: string | null; // normalized handle (parseVenmoInput)
   zelleInput: string; // raw email/phone the host typed (server normalizes)
@@ -42,16 +56,24 @@ export function todayString(): string {
 
 export function emptyDraft(): Draft {
   return {
+    splitType: "restaurant",
     restaurantName: "",
     date: todayString(),
     items: [],
     tax: "",
     ocrSubtotalCents: null,
     ocrTipCents: null,
+    ocrDiscountCents: null,
     hostName: "",
     tipMode: "percent",
     tipPercent: 20,
     tipFlat: "",
+    // A zero discount IS "no discount": the control stays collapsed and the
+    // payload sends discountType null, so nothing about the room changes until
+    // the host actually enters one.
+    discountMode: "percent",
+    discountPercent: 0,
+    discountFlat: "",
     venmoInput: "",
     venmoUsername: null,
     zelleInput: "",
@@ -60,18 +82,49 @@ export function emptyDraft(): Draft {
   };
 }
 
-export function newItem(): DraftItem {
-  return { key: nanoid(), name: "", quantity: 1, price: "", sharedByAll: false };
+export function newItem(sharedByAll = false): DraftItem {
+  return { key: nanoid(), name: "", quantity: 1, price: "", sharedByAll };
 }
 
-export function itemsFromReceipt(r: ParsedReceipt): DraftItem[] {
-  return r.items.map((it) => ({
-    key: nanoid(),
-    name: it.name,
-    quantity: Math.max(1, Math.round(it.quantity) || 1),
-    price: centsToDollarString(it.unitPriceCents),
-    sharedByAll: false,
-  }));
+/** A grocery run is shared by default — one cart, one household. A restaurant
+ * bill is not: everyone claims what they ordered. */
+export function sharedByDefault(splitType: SplitType): boolean {
+  return splitType === "grocery";
+}
+
+/** The name a split falls back to when the host never typed one. */
+export function draftSplitName(draft: Draft): string {
+  return draft.restaurantName.trim() || (draft.splitType === "grocery" ? "Grocery run" : "Dinner");
+}
+
+export function itemsFromReceipt(r: ParsedReceipt, sharedByAll = false): DraftItem[] {
+  return r.items.map((it) => {
+    const quantity = Math.max(1, Math.round(it.quantity) || 1);
+    const draft: DraftItem = {
+      key: nanoid(),
+      name: it.name,
+      quantity,
+      price: centsToDollarString(it.unitPriceCents),
+      sharedByAll,
+    };
+    // Only worth keeping when the printed total isn't reproducible from the
+    // unit price — otherwise quantity × unit already says the same thing.
+    if (it.totalCents !== quantity * it.unitPriceCents) {
+      draft.receiptTotalCents = it.totalCents;
+    }
+    return draft;
+  });
+}
+
+/** Merge a wizard edit into a draft item. Touching the price or quantity means
+ * the host is now the source of truth for this line, so the receipt's printed
+ * total is dropped and the row prices exactly as a hand-entered one would. */
+export function applyItemEdit(it: DraftItem, next: Partial<DraftItem>): DraftItem {
+  const merged: DraftItem = { ...it, ...next };
+  if (next.price !== undefined || next.quantity !== undefined) {
+    delete merged.receiptTotalCents;
+  }
+  return merged;
 }
 
 export function itemUnitCents(it: DraftItem): number {
@@ -79,7 +132,7 @@ export function itemUnitCents(it: DraftItem): number {
 }
 
 export function itemLineCents(it: DraftItem): number {
-  return it.quantity * itemUnitCents(it);
+  return it.receiptTotalCents ?? it.quantity * itemUnitCents(it);
 }
 
 export function computeSubtotalCents(items: DraftItem[]): number {
@@ -87,9 +140,39 @@ export function computeSubtotalCents(items: DraftItem[]): number {
 }
 
 export function tipPreviewCents(draft: Draft): number {
+  // Groceries have no tip at all — the wizard hides the editor, and the payload
+  // sends a flat 0% so nothing can leak in from an earlier step.
+  if (draft.splitType === "grocery") return 0;
   if (draft.tipMode === "amount") return dollarsToCents(draft.tipFlat);
   const subtotal = computeSubtotalCents(draft.items);
   return Math.round((subtotal * draft.tipPercent) / 100);
+}
+
+/**
+ * The raw discount the host entered — percent points, or cents when the mode is
+ * a flat amount. 0 means "no discount", which is the whole reason the control
+ * can stay invisible until it's used: nothing is sent and nothing is shown.
+ */
+export function draftDiscountValue(draft: Draft): number {
+  return Math.max(
+    0,
+    draft.discountMode === "amount" ? dollarsToCents(draft.discountFlat) : draft.discountPercent,
+  );
+}
+
+/**
+ * The whole-bill discount the draft currently describes, in cents. Clamped to
+ * the items subtotal — a bigger coupon than the bill can't take the total
+ * negative — matching computeDiscountCents on the server. Unlike the tip, a
+ * grocery run keeps its discount: coupons are exactly what a cart has.
+ */
+export function discountPreviewCents(draft: Draft): number {
+  const subtotal = computeSubtotalCents(draft.items);
+  const raw =
+    draft.discountMode === "amount"
+      ? dollarsToCents(draft.discountFlat)
+      : Math.round((subtotal * draft.discountPercent) / 100);
+  return Math.min(Math.max(0, subtotal), Math.max(0, raw));
 }
 
 /** Items that will actually be sent (named, non-empty). */
@@ -99,16 +182,25 @@ export function payableItems(items: DraftItem[]): DraftItem[] {
 
 export function buildCreatePayload(draft: Draft): CreateSplitPayload {
   const venmoUsername = draft.venmoUsername ?? parseVenmoInput(draft.venmoInput);
+  const grocery = draft.splitType === "grocery";
+  // A grocery run skips the tip but keeps the discount — coupons are exactly
+  // what a cart has.
+  const discountValue = draftDiscountValue(draft);
   return {
     hostName: draft.hostName.trim(),
+    splitType: draft.splitType,
     restaurantName: draft.restaurantName.trim() || null,
     date: draft.date || null,
     venmoUsername: venmoUsername ?? null,
     zelleInput: draft.zelleInput.trim() || null,
     venmoQrDataUrl: draft.venmoQrDataUrl,
     receiptImageDataUrl: draft.receiptImageDataUrl,
-    tipType: draft.tipMode,
-    tipValue: draft.tipMode === "percent" ? draft.tipPercent : dollarsToCents(draft.tipFlat),
+    // 0% of anything is $0, whatever the items add up to — the one tip shape
+    // that can't round to a stray cent on a grocery run.
+    tipType: grocery ? "percent" : draft.tipMode,
+    tipValue: grocery ? 0 : draft.tipMode === "percent" ? draft.tipPercent : dollarsToCents(draft.tipFlat),
+    discountType: discountValue > 0 ? draft.discountMode : null,
+    discountValue: discountValue > 0 ? discountValue : 0,
     taxCents: dollarsToCents(draft.tax),
     items: payableItems(draft.items).map((it) => {
       const unitPriceCents = itemUnitCents(it);
@@ -116,7 +208,9 @@ export function buildCreatePayload(draft: Draft): CreateSplitPayload {
         name: it.name.trim(),
         quantity: it.quantity,
         unitPriceCents,
-        totalCents: it.quantity * unitPriceCents,
+        // Prefer what the receipt printed: quantity × unit loses the remainder
+        // whenever the unit price was derived by dividing an indivisible total.
+        totalCents: it.receiptTotalCents ?? it.quantity * unitPriceCents,
         sharedByAll: it.sharedByAll,
       };
     }),

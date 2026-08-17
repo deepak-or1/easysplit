@@ -5,6 +5,7 @@ import clsx from "clsx";
 import type { ItemWithClaims, Participant } from "@/lib/types";
 import { F_ZERO, formatFrac, fr } from "@/lib/fraction";
 import { Avatar, Button, Money } from "@/components/ui";
+import { BirthdayMark } from "./BirthdayMark";
 
 /**
  * Inline people-picker for splitting one item among a chosen group.
@@ -95,6 +96,7 @@ export function SplitPicker({
             >
               <Avatar name={p.name} size="sm" className={clsx(!on && "opacity-50")} />
               {isMe ? "You" : p.name}
+              {p.isBirthday && <BirthdayMark name={p.name} />}
             </button>
           );
         })}

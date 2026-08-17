@@ -10,12 +10,15 @@ import { TotalsSummary } from "./TotalsSummary";
 import {
   computeSubtotalCents,
   decodeQrFromDataUrl,
+  discountPreviewCents,
+  draftDiscountValue,
   fileToDataUrl,
   tipPreviewCents,
   type Draft,
 } from "./helpers";
 
 const TIP_PRESETS = [15, 18, 20, 25];
+const DISCOUNT_PRESETS = [10, 15, 20, 25];
 
 type QrStatus = "idle" | "decoding" | "decoded" | "backup";
 
@@ -31,6 +34,10 @@ export function StepHost({
   const liveHandle = parseVenmoInput(draft.venmoInput);
   const zelleParsed = parseZelleInput(draft.zelleInput);
   const tipCents = tipPreviewCents(draft);
+  const discountCents = discountPreviewCents(draft);
+  // Nobody tips the self-checkout: a grocery run skips the tip editor outright
+  // (the payload sends 0%), and the totals go straight from tax to the total.
+  const grocery = draft.splitType === "grocery";
 
   async function handleQrFile(file: File) {
     setQrStatus("decoding");
@@ -56,7 +63,9 @@ export function StepHost({
       <header className="text-center">
         <h1 className="font-display text-2xl font-semibold text-ink">Who&apos;s collecting?</h1>
         <p className="mt-1 text-sm text-muted">
-          Your name, the tip, and where friends send the money.
+          {grocery
+            ? "Your name and where the household sends the money."
+            : "Your name, the tip, and where friends send the money."}
         </p>
       </header>
 
@@ -72,84 +81,107 @@ export function StepHost({
         />
       </label>
 
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted">Tip</span>
-          <div className="flex gap-1.5">
-            <Chip active={draft.tipMode === "percent"} onClick={() => patch({ tipMode: "percent" })}>
-              %
-            </Chip>
-            <Chip active={draft.tipMode === "amount"} onClick={() => patch({ tipMode: "amount" })}>
-              Flat $
-            </Chip>
-          </div>
+      {grocery ? (
+        <div className="flex flex-col gap-3">
+          {/* No tip on a cart, but coupons are exactly what a cart has — the
+              discount control is the one money editor a grocery run keeps. */}
+          <DiscountEditor draft={draft} patch={patch} cents={discountCents} />
+          <hr className="receipt-rule" />
+          <TotalsSummary
+            itemsCents={computeSubtotalCents(draft.items)}
+            taxCents={dollarsToCents(draft.tax)}
+            tipCents={null}
+            discountCents={discountCents}
+            totalLabel="Cart total"
+            totalEmoji="🛒"
+          />
+          <p className="rounded-xl bg-grocery-soft px-3.5 py-2.5 text-xs text-grocery">
+            No tip on a grocery run — just items and tax.
+          </p>
         </div>
-
-        {draft.tipMode === "percent" ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {TIP_PRESETS.map((pct) => (
-              <Chip
-                key={pct}
-                active={draft.tipPercent === pct}
-                onClick={() => patch({ tipPercent: pct })}
-              >
-                {pct}%
-              </Chip>
-            ))}
-            <div className="relative w-24">
-              <Input
-                value={String(draft.tipPercent)}
-                onChange={(e) => {
-                  const n = parseInt(e.target.value.replace(/[^\d]/g, ""), 10);
-                  patch({ tipPercent: Number.isFinite(n) ? Math.min(100, n) : 0 });
-                }}
-                inputMode="numeric"
-                aria-label="Custom tip percent"
-                className="pr-7 text-right tabular"
-              />
-              <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-muted">
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted">Tip</span>
+            <div className="flex gap-1.5">
+              <Chip active={draft.tipMode === "percent"} onClick={() => patch({ tipMode: "percent" })}>
                 %
-              </span>
+              </Chip>
+              <Chip active={draft.tipMode === "amount"} onClick={() => patch({ tipMode: "amount" })}>
+                Flat $
+              </Chip>
             </div>
           </div>
-        ) : (
-          <div className="relative w-36">
-            <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted">
-              $
-            </span>
-            <Input
-              value={draft.tipFlat}
-              onChange={(e) => patch({ tipFlat: e.target.value })}
-              inputMode="decimal"
-              placeholder="0.00"
-              aria-label="Flat tip in dollars"
-              className="pl-7 text-right tabular"
-            />
-          </div>
-        )}
 
-        {draft.ocrTipCents ? (
-          <p className="rounded-xl bg-gold-soft px-3.5 py-2.5 text-xs text-[#6f5a00]">
-            The receipt already includes a{" "}
-            <Money cents={draft.ocrTipCents} className="font-semibold" />{" "}
-            tip / service charge —
-            we&apos;ve prefilled it so the table pays it back. Bump the amount up if you tipped
-            extra on top.
+          {draft.tipMode === "percent" ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {TIP_PRESETS.map((pct) => (
+                <Chip
+                  key={pct}
+                  active={draft.tipPercent === pct}
+                  onClick={() => patch({ tipPercent: pct })}
+                >
+                  {pct}%
+                </Chip>
+              ))}
+              <div className="relative w-24">
+                <Input
+                  value={String(draft.tipPercent)}
+                  onChange={(e) => {
+                    const n = parseInt(e.target.value.replace(/[^\d]/g, ""), 10);
+                    patch({ tipPercent: Number.isFinite(n) ? Math.min(100, n) : 0 });
+                  }}
+                  inputMode="numeric"
+                  aria-label="Custom tip percent"
+                  className="pr-7 text-right tabular"
+                />
+                <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-muted">
+                  %
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="relative w-36">
+              <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted">
+                $
+              </span>
+              <Input
+                value={draft.tipFlat}
+                onChange={(e) => patch({ tipFlat: e.target.value })}
+                inputMode="decimal"
+                placeholder="0.00"
+                aria-label="Flat tip in dollars"
+                className="pl-7 text-right tabular"
+              />
+            </div>
+          )}
+
+          {draft.ocrTipCents ? (
+            <p className="rounded-xl bg-gold-soft px-3.5 py-2.5 text-xs text-[#6f5a00]">
+              The receipt already includes a{" "}
+              <Money cents={draft.ocrTipCents} className="font-semibold" />{" "}
+              tip / service charge —
+              we&apos;ve prefilled it so the table pays it back. Bump the amount up if you tipped
+              extra on top.
+            </p>
+          ) : null}
+          <p className="text-xs text-muted">
+            Tip so far: <Money cents={tipCents} className="text-ink" />{" "}
+            — split across the table by
+            what everyone ordered.
           </p>
-        ) : null}
-        <p className="text-xs text-muted">
-          Tip so far: <Money cents={tipCents} className="text-ink" />{" "}
-          — split across the table by
-          what everyone ordered.
-        </p>
 
-        <hr className="receipt-rule" />
-        <TotalsSummary
-          itemsCents={computeSubtotalCents(draft.items)}
-          taxCents={dollarsToCents(draft.tax)}
-          tipCents={tipCents}
-        />
-      </div>
+          <DiscountEditor draft={draft} patch={patch} cents={discountCents} />
+
+          <hr className="receipt-rule" />
+          <TotalsSummary
+            itemsCents={computeSubtotalCents(draft.items)}
+            taxCents={dollarsToCents(draft.tax)}
+            tipCents={tipCents}
+            discountCents={discountCents}
+          />
+        </div>
+      )}
 
       {/* Venmo */}
       <Card className="flex flex-col gap-3 p-4">
@@ -268,6 +300,119 @@ export function StepHost({
             ))}
         </label>
       </Card>
+    </div>
+  );
+}
+
+/**
+ * Whole-bill discount — a 15% off the check, a promo code, a coupon on the cart.
+ * Invisible until it's used: one muted line of text, and only the host who
+ * actually got a discount ever opens it. Starts open when the draft already
+ * carries one (OCR read it off the receipt, or the host is stepping back).
+ */
+function DiscountEditor({
+  draft,
+  patch,
+  cents,
+}: {
+  draft: Draft;
+  patch: (p: Partial<Draft>) => void;
+  cents: number;
+}) {
+  const [open, setOpen] = useState(() => draftDiscountValue(draft) > 0);
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="self-start text-xs font-medium text-muted underline-offset-2 transition-colors hover:text-ink hover:underline"
+      >
+        + Add a discount or promo
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted">Discount</span>
+        <div className="flex gap-1.5">
+          <Chip
+            active={draft.discountMode === "percent"}
+            onClick={() => patch({ discountMode: "percent" })}
+          >
+            %
+          </Chip>
+          <Chip
+            active={draft.discountMode === "amount"}
+            onClick={() => patch({ discountMode: "amount" })}
+          >
+            Flat $
+          </Chip>
+        </div>
+      </div>
+
+      {draft.discountMode === "percent" ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {DISCOUNT_PRESETS.map((pct) => (
+            <Chip
+              key={pct}
+              active={draft.discountPercent === pct}
+              onClick={() => patch({ discountPercent: pct })}
+            >
+              {pct}%
+            </Chip>
+          ))}
+          <div className="relative w-24">
+            <Input
+              value={String(draft.discountPercent)}
+              onChange={(e) => {
+                const n = parseInt(e.target.value.replace(/[^\d]/g, ""), 10);
+                // 100% off is a comped bill; there is nothing past it.
+                patch({ discountPercent: Number.isFinite(n) ? Math.min(100, n) : 0 });
+              }}
+              inputMode="numeric"
+              aria-label="Custom discount percent"
+              className="pr-7 text-right tabular"
+            />
+            <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-muted">
+              %
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="relative w-36">
+          <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted">
+            $
+          </span>
+          <Input
+            value={draft.discountFlat}
+            onChange={(e) => patch({ discountFlat: e.target.value })}
+            inputMode="decimal"
+            placeholder="0.00"
+            aria-label="Flat discount in dollars"
+            className="pl-7 text-right tabular"
+          />
+        </div>
+      )}
+
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-xs text-muted">
+          Coming off the bill: −<Money cents={cents} className="text-ink" /> — spread across the
+          table by what everyone ordered.
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            setOpen(false);
+            patch({ discountPercent: 0, discountFlat: "" });
+          }}
+          className="shrink-0 text-xs font-medium text-muted transition-colors hover:text-danger"
+        >
+          Remove
+        </button>
+      </div>
     </div>
   );
 }

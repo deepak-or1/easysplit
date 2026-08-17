@@ -37,6 +37,15 @@ const actionSchema = z.discriminatedUnion("type", [
     itemId: z.string().min(1),
     participantIds: z.array(z.string().min(1)).min(1, "split needs at least one person"),
   }),
+  // takeover carries no participantId of its own: it is filled in below from
+  // the body's top-level participantId. That is a shape convenience, not an
+  // authentication check — participant identity is self-asserted here, as it
+  // is for every other action (the room link is the credential; there are no
+  // guest accounts). Anything inside the action object is stripped by zod.
+  z.object({
+    type: z.literal("takeover"),
+    itemId: z.string().min(1),
+  }),
 ]);
 
 const claimSchema = z
@@ -102,11 +111,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     actions = parseResult.actions;
   } else {
     // Direct actions — shares arrive as plain {n,d}; re-normalize via fr().
-    actions = data.actions!.map((a) =>
-      a.type === "set"
-        ? { type: "set", itemId: a.itemId, participantId: a.participantId, share: fr(a.share.n, a.share.d) }
-        : a,
-    );
+    // takeover is bound to the body's top-level participantId, so a per-action
+    // one can't name someone else — same self-asserted identity as every other
+    // action, not a stronger guarantee.
+    actions = data.actions!.map((a) => {
+      if (a.type === "set") {
+        return {
+          type: "set",
+          itemId: a.itemId,
+          participantId: a.participantId,
+          share: fr(a.share.n, a.share.d),
+        };
+      }
+      if (a.type === "takeover") {
+        return { type: "takeover", itemId: a.itemId, participantId: participant.id };
+      }
+      return a;
+    });
   }
 
   const applied = await applyActions(id, actions);
