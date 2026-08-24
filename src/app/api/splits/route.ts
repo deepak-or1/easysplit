@@ -68,6 +68,12 @@ const createSchema = z
     discountValue: z.number().finite().min(0, "discount can't be negative").optional(),
     taxCents: z.number().int("tax must be whole cents").min(0, "tax can't be negative"),
     splitType: z.enum(["restaurant", "grocery"]).optional(),
+    groupSize: z
+      .number()
+      .int("group size must be a whole number")
+      .min(1, "group size must be at least 1")
+      .max(99, "group size too large")
+      .nullish(),
     items: z.array(itemSchema).min(1, "add at least one item"),
   })
   .superRefine((data, ctx) => {
@@ -166,6 +172,7 @@ export async function POST(req: Request) {
     discountValue: hasDiscount ? discountValue : 0,
     taxCents: data.taxCents,
     splitType: data.splitType ?? "restaurant",
+    groupSize: data.groupSize ?? null,
     imagePath,
     items,
   });

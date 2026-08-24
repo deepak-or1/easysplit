@@ -31,6 +31,8 @@ export interface Split {
   taxCents: number;
   status: SplitStatus;
   splitType: SplitType;
+  /** Declared headcount for the table. null = not set; shared items then divide by joiners only. */
+  groupSize: number | null;
   createdAt: string;
 }
 

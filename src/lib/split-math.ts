@@ -22,6 +22,8 @@ export interface SettlementInput {
   /** null = no whole-bill discount. */
   discountType?: DiscountType | null;
   discountValue?: number; // percent (may be fractional) or cents
+  /** Declared headcount: sharedByAll items divide by max(this, joiners). null/absent = joiners only. */
+  groupSize?: number | null;
 }
 
 export function computeTipCents(subtotalCents: number, tipType: TipType, tipValue: number): number {
@@ -51,28 +53,37 @@ export function computeDiscountCents(
 
 /**
  * The effective claims on an item. sharedByAll items are treated as an even
- * split across every participant (quantity/N each) and explicit claims are
- * ignored; with zero participants a shared item is simply unclaimed.
+ * split across max(groupSize, joiners) — the declared headcount holds each
+ * joiner's share down before everyone has joined, and the not-yet-joined
+ * remainder stays unclaimed — and explicit claims are ignored; with zero
+ * participants a shared item is simply unclaimed.
  */
 export function effectiveClaims(
   item: ReceiptItem,
   claims: Claim[],
   participants: Participant[],
+  groupSize?: number | null,
 ): Claim[] {
   if (item.sharedByAll) {
     if (participants.length === 0) return [];
+    const denominator = Math.max(groupSize ?? 0, participants.length);
     return participants.map((p) => ({
       itemId: item.id,
       participantId: p.id,
-      share: fr(item.quantity, participants.length),
+      share: fr(item.quantity, denominator),
     }));
   }
   return claims.filter((c) => c.itemId === item.id && !fIsZero(c.share));
 }
 
 /** Σ shares claimed on an item (after sharedByAll expansion). */
-export function claimedShare(item: ReceiptItem, claims: Claim[], participants: Participant[]): Frac {
-  return fsum(effectiveClaims(item, claims, participants).map((c) => c.share));
+export function claimedShare(
+  item: ReceiptItem,
+  claims: Claim[],
+  participants: Participant[],
+  groupSize?: number | null,
+): Frac {
+  return fsum(effectiveClaims(item, claims, participants, groupSize).map((c) => c.share));
 }
 
 /**
@@ -84,7 +95,7 @@ export function claimedShare(item: ReceiptItem, claims: Claim[], participants: P
  * and subtracted, so it never strands a cent.
  */
 export function computeSettlement(input: SettlementInput): Settlement {
-  const { items, claims, participants, taxCents, tipType, tipValue } = input;
+  const { items, claims, participants, taxCents, tipType, tipValue, groupSize } = input;
   const discountType = input.discountType ?? null;
   const discountValue = input.discountValue ?? 0;
 
@@ -101,7 +112,7 @@ export function computeSettlement(input: SettlementInput): Settlement {
   let claimedWeight = 0; // for progress ratio, in item-cents terms
 
   for (const item of items) {
-    const eff = effectiveClaims(item, claims, participants).filter((c) =>
+    const eff = effectiveClaims(item, claims, participants, groupSize).filter((c) =>
       byPerson.has(c.participantId),
     );
     const claimed = fsum(eff.map((c) => c.share));

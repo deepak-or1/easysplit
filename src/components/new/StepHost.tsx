@@ -81,6 +81,28 @@ export function StepHost({
         />
       </label>
 
+      {/* Declared headcount — keeps shared items split N ways before everyone joins */}
+      <label className="flex flex-col gap-1.5">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted">
+          How many people? <span className="normal-case tracking-normal">(optional)</span>
+        </span>
+        <Input
+          value={draft.groupSize}
+          onChange={(e) => {
+            const digits = e.target.value.replace(/[^\d]/g, "").slice(0, 2);
+            patch({ groupSize: digits === "0" ? "" : digits });
+          }}
+          inputMode="numeric"
+          placeholder="e.g. 5"
+          aria-label="How many people are splitting"
+          className="w-24 text-right tabular"
+        />
+        <span className="text-xs text-muted">
+          Shared items split this many ways from the start — nobody overpays before the whole
+          group joins. Leave blank to split by whoever&apos;s joined.
+        </span>
+      </label>
+
       {grocery ? (
         <div className="flex flex-col gap-3">
           {/* No tip on a cart, but coupons are exactly what a cart has — the

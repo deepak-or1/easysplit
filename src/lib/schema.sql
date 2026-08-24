@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS splits (
   tax_cents       INTEGER NOT NULL DEFAULT 0,
   status          TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','settled')),
   split_type      TEXT NOT NULL DEFAULT 'restaurant' CHECK (split_type IN ('restaurant','grocery')),
+  group_size      INTEGER, -- NULL = host declared no headcount; shared items split by joiners only
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

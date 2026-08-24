@@ -46,6 +46,7 @@ interface SplitRow {
   tax_cents: number;
   status: "open" | "settled";
   split_type: SplitType;
+  group_size: number | null;
   created_at: string;
 }
 
@@ -95,6 +96,9 @@ function toSplit(r: SplitRow): Split {
     taxCents: r.tax_cents,
     status: r.status,
     splitType: r.split_type,
+    // Rooms created before the group_size column exists read back undefined on
+    // SQLite; normalize to the "no declared headcount" the whole app expects.
+    groupSize: r.group_size ?? null,
     createdAt: r.created_at,
   };
 }
@@ -155,6 +159,7 @@ export interface CreateSplitInput {
   discountValue?: number; // defaults to 0
   taxCents: number;
   splitType?: SplitType; // defaults to "restaurant" (the SMS path never sets it)
+  groupSize?: number | null; // declared headcount; defaults to null = not set
   imagePath?: string | null; // stored upload filename
   ocrJson?: string | null;
   items: NewItemInput[];
@@ -175,8 +180,8 @@ export async function createSplit(input: CreateSplitInput): Promise<CreateSplitR
 
   await db.tx(async (q) => {
     await q.run(
-      `INSERT INTO splits (id, host_key, restaurant_name, date, host_name, venmo_username, venmo_qr_path, zelle_handle, tip_type, tip_value, discount_type, discount_value, tax_cents, split_type)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO splits (id, host_key, restaurant_name, date, host_name, venmo_username, venmo_qr_path, zelle_handle, tip_type, tip_value, discount_type, discount_value, tax_cents, split_type, group_size)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         splitId,
         hostKey,
@@ -192,6 +197,7 @@ export async function createSplit(input: CreateSplitInput): Promise<CreateSplitR
         input.discountValue ?? 0,
         input.taxCents,
         input.splitType ?? "restaurant",
+        input.groupSize ?? null,
       ],
     );
     await q.run(`INSERT INTO receipts (id, split_id, image_path, ocr_json) VALUES (?, ?, ?, ?)`, [
@@ -300,10 +306,11 @@ export async function getRoomState(splitId: string): Promise<RoomState | null> {
     tipValue: split.tipValue,
     discountType: split.discountType,
     discountValue: split.discountValue,
+    groupSize: split.groupSize,
   });
 
   const itemsWithClaims: ItemWithClaims[] = items.map((item) => {
-    const cs = claimedShare(item, claims, participants);
+    const cs = claimedShare(item, claims, participants, split.groupSize);
     const rem = fsub(fr(item.quantity), cs);
     return {
       ...item,
@@ -361,6 +368,7 @@ export interface SplitMetaPatch {
   discountValue?: number;
   taxCents?: number;
   status?: "open" | "settled";
+  groupSize?: number | null; // null clears the declared headcount
 }
 
 export async function updateSplitMeta(splitId: string, patch: SplitMetaPatch): Promise<void> {
@@ -377,6 +385,7 @@ export async function updateSplitMeta(splitId: string, patch: SplitMetaPatch): P
     ["discountValue", "discount_value"],
     ["taxCents", "tax_cents"],
     ["status", "status"],
+    ["groupSize", "group_size"],
   ];
   for (const [key, col] of map) {
     if (patch[key] !== undefined) {

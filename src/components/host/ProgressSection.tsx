@@ -5,7 +5,7 @@ import { fIsZero } from "@/lib/fraction";
 import { Avatar, Card, Money, ProgressBar } from "@/components/ui";
 
 export function ProgressSection({ room }: { room: RoomState }) {
-  const { settlement, items, participants } = room;
+  const { split, settlement, items, participants } = room;
   const claimedItems = items.filter((it) => fIsZero(it.remaining)).length;
   const claimedCents = settlement.grandTotalCents - settlement.unclaimed.totalCents;
 
@@ -26,7 +26,9 @@ export function ProgressSection({ room }: { room: RoomState }) {
       <div className="flex items-center justify-between gap-2 pt-1">
         <AvatarStack names={participants.map((p) => p.name)} />
         <p className="shrink-0 text-sm text-muted">
-          {participants.length} {participants.length === 1 ? "person" : "people"} at the table
+          {split.groupSize
+            ? `${participants.length} of ${split.groupSize} joined`
+            : `${participants.length} ${participants.length === 1 ? "person" : "people"} at the table`}
         </p>
       </div>
     </Card>

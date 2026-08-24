@@ -37,6 +37,7 @@ export interface Draft {
   ocrTipCents: number | null; // printed tip/service charge from parse (already owed!)
   ocrDiscountCents: number | null; // whole-bill discount read off the receipt
   hostName: string;
+  groupSize: string; // headcount as typed; "" = not declared
   tipMode: TipType; // "percent" | "amount"
   tipPercent: number; // used when tipMode === "percent"
   tipFlat: string; // dollars, used when tipMode === "amount"
@@ -65,6 +66,7 @@ export function emptyDraft(): Draft {
     ocrTipCents: null,
     ocrDiscountCents: null,
     hostName: "",
+    groupSize: "",
     tipMode: "percent",
     tipPercent: 20,
     tipFlat: "",
@@ -186,6 +188,7 @@ export function buildCreatePayload(draft: Draft): CreateSplitPayload {
   // A grocery run skips the tip but keeps the discount — coupons are exactly
   // what a cart has.
   const discountValue = draftDiscountValue(draft);
+  const groupSizeNum = parseInt(draft.groupSize, 10);
   return {
     hostName: draft.hostName.trim(),
     splitType: draft.splitType,
@@ -202,6 +205,7 @@ export function buildCreatePayload(draft: Draft): CreateSplitPayload {
     discountType: discountValue > 0 ? draft.discountMode : null,
     discountValue: discountValue > 0 ? discountValue : 0,
     taxCents: dollarsToCents(draft.tax),
+    groupSize: Number.isFinite(groupSizeNum) && groupSizeNum >= 1 ? Math.min(99, groupSizeNum) : null,
     items: payableItems(draft.items).map((it) => {
       const unitPriceCents = itemUnitCents(it);
       return {

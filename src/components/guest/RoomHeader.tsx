@@ -76,6 +76,7 @@ export function RoomHeader({
           <p className="mt-0.5 text-sm text-muted">
             {date ? `${date} · ` : ""}
             hosted by {split.hostName}
+            {split.groupSize ? ` · ${participants.length} of ${split.groupSize} joined` : ""}
           </p>
           {isHost && (
             <Link

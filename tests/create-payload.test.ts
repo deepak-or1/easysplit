@@ -117,3 +117,21 @@ describe("buildCreatePayload — line totals sent to the API", () => {
     expect(payload.items[0].totalCents).toBe(999);
   });
 });
+
+describe("buildCreatePayload — declared group size", () => {
+  const items = itemsFromReceipt(receipt([CLEAN]));
+
+  it("sends null when the field was left blank", () => {
+    expect(buildCreatePayload(draftWith(items)).groupSize).toBeNull();
+  });
+
+  it("sends the typed headcount as a number", () => {
+    const payload = buildCreatePayload({ ...draftWith(items), groupSize: "5" });
+    expect(payload.groupSize).toBe(5);
+  });
+
+  it("treats unparseable input as not declared", () => {
+    const payload = buildCreatePayload({ ...draftWith(items), groupSize: "abc" });
+    expect(payload.groupSize).toBeNull();
+  });
+});

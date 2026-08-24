@@ -76,6 +76,14 @@ const patchSchema = z
     discountValue: z.number().finite().min(0, "discount can't be negative").optional(),
     taxCents: z.number().int("tax must be whole cents").min(0, "tax can't be negative").optional(),
     status: z.enum(["open", "settled"]).optional(),
+    // null clears the declared headcount; undefined leaves it alone.
+    groupSize: z
+      .number()
+      .int("group size must be a whole number")
+      .min(1, "group size must be at least 1")
+      .max(99, "group size too large")
+      .nullable()
+      .optional(),
     birthdayParticipantIds: z.array(z.string().min(1)).max(50).optional(),
     items: z.array(patchItemSchema).optional(),
   })
@@ -225,6 +233,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   if (data.taxCents !== undefined) meta.taxCents = data.taxCents;
   if (data.status !== undefined) meta.status = data.status;
+  if (data.groupSize !== undefined) meta.groupSize = data.groupSize;
   if (Object.keys(meta).length) await updateSplitMeta(id, meta);
 
   // Full replace: exactly these participants are birthday people, everyone

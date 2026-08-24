@@ -248,6 +248,7 @@ function ReceiptEditor({ room, splitId, hostKey, applyState, onDone }: Props & {
     split.discountType === "amount" ? centsToDollarString(split.discountValue) : "",
   );
   const [tax, setTax] = useState(centsToDollarString(split.taxCents));
+  const [groupSize, setGroupSize] = useState(split.groupSize ? String(split.groupSize) : "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -301,6 +302,8 @@ function ReceiptEditor({ room, splitId, hostKey, applyState, onDone }: Props & {
       // Collapsed, or opened and left at zero, both mean "no discount" — send
       // null so the room stores none rather than a 0% one.
       const keepDiscount = showDiscount && discountValue > 0;
+      // Blank or zeroed-out headcount means "not declared" — null clears it.
+      const groupSizeNum = parseInt(groupSize, 10);
       const next = await patchSplit(splitId, hostKey, {
         restaurantName: restaurantName.trim() || null,
         items: payloadItems,
@@ -308,6 +311,8 @@ function ReceiptEditor({ room, splitId, hostKey, applyState, onDone }: Props & {
         discountType: keepDiscount ? discountType : null,
         discountValue: keepDiscount ? discountValue : 0,
         taxCents: Math.max(0, dollarsToCents(tax)),
+        groupSize:
+          Number.isFinite(groupSizeNum) && groupSizeNum >= 1 ? Math.min(99, groupSizeNum) : null,
       });
       applyState(next);
       onDone();
@@ -545,6 +550,27 @@ function ReceiptEditor({ room, splitId, hostKey, applyState, onDone }: Props & {
             aria-label="Tax amount"
           />
         </div>
+      </div>
+
+      <div className="space-y-2 border-t border-line pt-4">
+        <span className="text-sm font-medium text-ink">People at the table</span>
+        <div className="w-24">
+          <Input
+            value={groupSize}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/[^\d]/g, "").slice(0, 2);
+              setGroupSize(digits === "0" ? "" : digits);
+            }}
+            inputMode="numeric"
+            placeholder="Not set"
+            className="text-right tabular"
+            aria-label="How many people are splitting"
+          />
+        </div>
+        <p className="text-xs text-muted">
+          Shared items split this many ways even before everyone joins. Leave blank to split by
+          whoever&apos;s joined.
+        </p>
       </div>
 
       {err && <ErrorNote message={err} />}

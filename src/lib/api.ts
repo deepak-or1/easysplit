@@ -42,6 +42,7 @@ export interface CreateSplitPayload {
   discountValue?: number; // percent, or cents when discountType === "amount"
   taxCents: number;
   splitType?: SplitType; // defaults to "restaurant"
+  groupSize?: number | null; // declared headcount; omitted / null = not set
   items: { name: string; quantity: number; unitPriceCents: number; totalCents: number; sharedByAll: boolean }[];
 }
 
@@ -76,6 +77,8 @@ export interface PatchSplitPayload {
   discountValue?: number;
   taxCents?: number;
   status?: "open" | "settled";
+  /** Declared headcount; null clears it, omit to leave it alone. */
+  groupSize?: number | null;
   /** Full replace — exactly these people are birthday people; [] clears it. */
   birthdayParticipantIds?: string[];
   items?: {
