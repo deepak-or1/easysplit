@@ -4,9 +4,11 @@ import { nanoid } from "nanoid";
 import { useMemo, useState } from "react";
 import type { DiscountType, ItemWithClaims, Participant, RoomState, TipType } from "@/lib/types";
 import { patchSplit } from "@/lib/api";
+import { isItemizable, itemizeLine } from "@/lib/itemize";
 import { centsToDollarString, dollarsToCents } from "@/lib/money";
 import { F_ONE, fcmp, fIsNeg, fIsZero, formatFrac } from "@/lib/fraction";
 import { Avatar, Badge, Button, Chip, ErrorNote, Input, Money } from "@/components/ui";
+import { ItemizeToggle } from "@/components/ItemizeToggle";
 
 type ApplyState = (state: RoomState) => void;
 
@@ -249,8 +251,17 @@ function ReceiptEditor({ room, splitId, hostKey, applyState, onDone }: Props & {
   );
   const [tax, setTax] = useState(centsToDollarString(split.taxCents));
   const [groupSize, setGroupSize] = useState(split.groupSize ? String(split.groupSize) : "");
+  // Off by default even mid-room: itemizing rewrites the ×N lines, and any
+  // claims on them that no longer fit a single unit are dropped, so it is the
+  // host's call each time rather than a remembered setting.
+  const [itemize, setItemize] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const itemizable = useMemo(
+    () => items.filter((it) => it.name.trim() && isItemizable(it)),
+    [items],
+  );
 
   function patchItem(key: string, patch: Partial<DraftItem>) {
     setItems((prev) => prev.map((it) => (it.key === key ? { ...it, ...patch } : it)));
@@ -279,17 +290,31 @@ function ReceiptEditor({ room, splitId, hostKey, applyState, onDone }: Props & {
     }
     setBusy(true);
     try {
-      const payloadItems = items.map((it) => {
+      const payloadItems = items.flatMap((it) => {
         const unitPriceCents = Math.max(0, dollarsToCents(it.price));
         const quantity = Math.max(1, Math.round(it.quantity) || 1);
-        return {
-          ...(it.id ? { id: it.id } : {}),
-          name: it.name.trim(),
-          quantity,
-          unitPriceCents,
-          totalCents: unitPriceCents * quantity,
-          sharedByAll: it.sharedByAll,
-        };
+        const name = it.name.trim();
+        const totalCents = unitPriceCents * quantity;
+        if (itemize && quantity > 1) {
+          // The first single keeps the row's id so the store updates it in
+          // place (and prunes claims that no longer fit one unit); the rest
+          // are inserts. Nothing else on the receipt is touched.
+          return itemizeLine({ name, quantity, totalCents }).map((row, i) => ({
+            ...(i === 0 && it.id ? { id: it.id } : {}),
+            ...row,
+            sharedByAll: it.sharedByAll,
+          }));
+        }
+        return [
+          {
+            ...(it.id ? { id: it.id } : {}),
+            name,
+            quantity,
+            unitPriceCents,
+            totalCents,
+            sharedByAll: it.sharedByAll,
+          },
+        ];
       });
       const tipValue =
         tipType === "percent"
@@ -335,6 +360,7 @@ function ReceiptEditor({ room, splitId, hostKey, applyState, onDone }: Props & {
       </label>
 
       <div className="space-y-3">
+        <ItemizeToggle lines={itemizable} checked={itemize} onChange={setItemize} disabled={busy} />
         {items.map((it) => (
           <div key={it.key} className="space-y-2.5 rounded-xl border border-line bg-cream/50 p-3">
             <div className="flex items-center gap-2">

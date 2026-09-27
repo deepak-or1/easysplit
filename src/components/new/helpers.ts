@@ -1,6 +1,7 @@
 import jsQR from "jsqr";
 import { nanoid } from "nanoid";
 import type { CreateSplitPayload } from "@/lib/api";
+import { isItemizable, itemizeLine } from "@/lib/itemize";
 import { centsToDollarString, dollarsToCents } from "@/lib/money";
 import type { DiscountType, ParsedReceipt, SplitType, TipType } from "@/lib/types";
 import { parseVenmoInput } from "@/lib/venmo";
@@ -38,6 +39,13 @@ export interface Draft {
   ocrDiscountCents: number | null; // whole-bill discount read off the receipt
   hostName: string;
   groupSize: string; // headcount as typed; "" = not declared
+  /**
+   * Break every ×N line into N single-unit lines when the split is created,
+   * so each plate can be claimed and split on its own (see lib/itemize.ts).
+   * Kept as a flag rather than expanding the draft in place so the host can
+   * flip it back and still see the receipt as it was printed.
+   */
+  itemizeQuantities: boolean;
   tipMode: TipType; // "percent" | "amount"
   tipPercent: number; // used when tipMode === "percent"
   tipFlat: string; // dollars, used when tipMode === "amount"
@@ -67,6 +75,7 @@ export function emptyDraft(): Draft {
     ocrDiscountCents: null,
     hostName: "",
     groupSize: "",
+    itemizeQuantities: false,
     tipMode: "percent",
     tipPercent: 20,
     tipFlat: "",
@@ -182,6 +191,31 @@ export function payableItems(items: DraftItem[]): DraftItem[] {
   return items.filter((it) => it.name.trim().length > 0);
 }
 
+/** Lines the itemize toggle would break up: named, with a quantity above 1. */
+export function itemizableItems(items: DraftItem[]): DraftItem[] {
+  return payableItems(items).filter(isItemizable);
+}
+
+/** One entry per line in the create payload, itemizing ×N lines when the
+ * draft asks for it. Line totals are unchanged either way, so the subtotal
+ * the host reviewed is the subtotal the room gets. */
+export function payloadItems(draft: Draft): CreateSplitPayload["items"] {
+  return payableItems(draft.items).flatMap((it) => {
+    const unitPriceCents = itemUnitCents(it);
+    const name = it.name.trim();
+    // Prefer what the receipt printed: quantity × unit loses the remainder
+    // whenever the unit price was derived by dividing an indivisible total.
+    const totalCents = it.receiptTotalCents ?? it.quantity * unitPriceCents;
+    if (draft.itemizeQuantities && isItemizable(it)) {
+      return itemizeLine({ name, quantity: it.quantity, totalCents }).map((row) => ({
+        ...row,
+        sharedByAll: it.sharedByAll,
+      }));
+    }
+    return [{ name, quantity: it.quantity, unitPriceCents, totalCents, sharedByAll: it.sharedByAll }];
+  });
+}
+
 export function buildCreatePayload(draft: Draft): CreateSplitPayload {
   const venmoUsername = draft.venmoUsername ?? parseVenmoInput(draft.venmoInput);
   const grocery = draft.splitType === "grocery";
@@ -206,18 +240,7 @@ export function buildCreatePayload(draft: Draft): CreateSplitPayload {
     discountValue: discountValue > 0 ? discountValue : 0,
     taxCents: dollarsToCents(draft.tax),
     groupSize: Number.isFinite(groupSizeNum) && groupSizeNum >= 1 ? Math.min(99, groupSizeNum) : null,
-    items: payableItems(draft.items).map((it) => {
-      const unitPriceCents = itemUnitCents(it);
-      return {
-        name: it.name.trim(),
-        quantity: it.quantity,
-        unitPriceCents,
-        // Prefer what the receipt printed: quantity × unit loses the remainder
-        // whenever the unit price was derived by dividing an indivisible total.
-        totalCents: it.receiptTotalCents ?? it.quantity * unitPriceCents,
-        sharedByAll: it.sharedByAll,
-      };
-    }),
+    items: payloadItems(draft),
   };
 }
 

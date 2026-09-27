@@ -108,6 +108,43 @@ export function Chip({
   );
 }
 
+/** An on/off switch. The label is the caller's: wrap it in a <label> or pass
+ * aria-label/aria-labelledby so the control reads as more than "switch". */
+export function Switch({
+  checked,
+  onChange,
+  className,
+  ...rest
+}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "onChange"> & {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={clsx(
+        "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+        "disabled:opacity-45",
+        checked ? "border-ink bg-ink" : "border-line bg-cream",
+        className,
+      )}
+      {...rest}
+    >
+      <span
+        aria-hidden
+        className={clsx(
+          "absolute top-0.5 size-5 rounded-full bg-card shadow-sm transition-transform",
+          checked ? "translate-x-[1.375rem]" : "translate-x-0.5",
+        )}
+      />
+    </button>
+  );
+}
+
 export function Spinner({ className }: { className?: string }) {
   return (
     <span
