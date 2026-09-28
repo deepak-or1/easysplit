@@ -1,6 +1,7 @@
 "use client";
 
 import { Button, Card, Input, Money } from "@/components/ui";
+import { ItemizeToggle } from "@/components/ItemizeToggle";
 import { dollarsToCents, formatCents } from "@/lib/money";
 import { GoldNote } from "./GoldNote";
 import { TotalsSummary } from "./TotalsSummary";
@@ -8,6 +9,7 @@ import {
   applyItemEdit,
   computeSubtotalCents,
   discountPreviewCents,
+  itemizableItems,
   itemLineCents,
   newItem,
   sharedByDefault,
@@ -73,6 +75,11 @@ export function StepCheck({
 
       {/* Items */}
       <div className="flex flex-col gap-3">
+        <ItemizeToggle
+          lines={itemizableItems(draft.items)}
+          checked={draft.itemizeQuantities}
+          onChange={(itemizeQuantities) => patch({ itemizeQuantities })}
+        />
         {draft.items.map((it) => (
           <div key={it.key} className="flex flex-col gap-2.5 rounded-xl border border-line bg-card p-3">
             <div className="flex items-center gap-2">
